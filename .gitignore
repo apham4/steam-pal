@@ -4,7 +4,8 @@ __pycache__/
 .venv/
 venv/
 env/
-*.env*
+*.env
+!.env.example
 database.db  # Don't commit the database file itself
 
 # Node / Vue
