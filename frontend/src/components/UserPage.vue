@@ -57,11 +57,12 @@ async function continueAsGuest() {
     <v-row align="center" justify="center">
       <v-col cols="12" md="6">
         <v-card class="pa-6" color="primary" dark>
-          <v-card-title class="text-h4">Steam Pal</v-card-title>
           <v-card-text>
-            <div class="mb-4">
-              This web app looks at data from your Steam profile using AI to recommend new games you’ll probably enjoy.
+            <div class="d-flex mb-2">
+                <v-icon size="48" color="secondary" class="mr-2">mdi-steam</v-icon>
+                <span class="steam-title">Steam Pal</span>
             </div>
+            <div class="subtitle mb-6">AI-Powered Game Recommendations for Steam Users</div>
             <v-btn
               color="secondary"
               class="mb-2"
