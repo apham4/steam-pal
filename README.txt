@@ -18,21 +18,77 @@ Frontend:
 
 -----
 
+DATA STRUCTURES:
+profile: {
+	steamId,
+	name,
+	avatar (link)
+}
+
+game: {
+	id,
+	title,
+	thumbnail (link),
+	releaseDate,
+	publisher,
+	developer,
+	price
+	salePrice,
+	description (short version)
+}
+
 PLANNED API ENDPOINTS (Subject to change):
-** GET /api/me
-- Purpose: Get the profile of the currently logged-in user.
-- Response: { "steam_id": "765...", "display_name": "Gamer123" }
+** POST /auth/steam
+- Purpose: Authenticate user via Steam OpenID.
+- Response: { 
+	jwt_token, 
+	profile, 
+	liked (list of game objects), 
+	disliked (list of game objects), 
+	pastRecommendations (list of game objects) 
+}
 
-** POST /api/recommendations
-- Purpose: Request a new game recommendation. Can optionally include filters.
-- Request body: { "genres": ["RPG", "Open World"], "tags": ["Story Rich"] }
-- Response: { "game_id": "578080", "game_name": "The Witcher 3: Wild Hunt", "reasoning": "Because you enjoyed similar open-world RPGs..." }
+** POST /auth/guest
+- Purpose: Guest login with Steam ID.
+- Request body: { steamId }
+- Response: {
+	profile, 
+	liked (list of game objects), 
+	disliked (list of game objects), 
+	pastRecommendations (list of game objects) 
+}
 
-** GET /api/recommendations
-- Purpose: Get the list of all past recommendations for the logged-in user.
-- Response: [ { "game_id": "578080", ... }, { "game_id": "271590", ... } ]
+** POST /recommendation
+- Purpose: Request a new game recommendation.
+- Include JWT token in Authorization header.
+- Request body: {
+	steamId, 
+	genre (list of strings), 
+	useWishlist (bool)}
+- Response: {
+	game (object),
+	reasoning
+}
 
-** POST /api/recommendations/{rec_id}/feedback
-- Purpose: Submit feedback (like/dislike) for a specific recommendation.
-- Request Body: { "liked": true }
-- Response: { "status": "success" }
+** POST /recommendation/past
+- Purpose: Request past recommendations.
+- Include JWT token in Authorization header.
+- Request body: {
+	steamId
+}
+- Response: {
+	array of game objects
+}
+
+** POST /preferences/update
+- Purpose: Update liked/disliked/past recommendations lists for a user.
+- Include JWT token in Authorization header.
+- Request body: {
+	steamId,
+	liked (array of game objects), // Maybe this should just be an array of game ids?
+	disliked (array of game objects), // Maybe this should just be an array of game ids?
+	pastRecommendations (array of game objects), // Maybe this should just be an array of game ids?
+}
+- Response: {
+	success: bool
+}
