@@ -1,8 +1,10 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
+import { useUserStore } from '../stores/user'
 
 // Toggle this to switch between mock and real API
-const USE_MOCK = true;
+const MOCK_AUTH = false;
+const MOCK_RECOMMENDATIONS = true;
 
 // Axios instance for real API
 const api = axios.create({
@@ -12,25 +14,39 @@ const api = axios.create({
   },
 });
 
+// Add JWT token to Authorization header for every request
+api.interceptors.request.use(config => {
+  const userStore = useUserStore()
+  const token = userStore.jwt
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config;
+});
+
 // # region Exported API functions
-export function authenticateWithSteam() {
-  return USE_MOCK ? mockAuthenticateWithSteam() : realAuthenticateWithSteam();
+export function getSteamLoginUrl() {
+  return MOCK_AUTH ? mockGetSteamLoginUrl() : realGetSteamLoginUrl()
 }
 
-export function guestLogin(steamId) {
-  return USE_MOCK ? mockGuestLogin(steamId) : realGuestLogin(steamId);
+export function getCurrentUser() {
+  return MOCK_AUTH ? mockGetCurrentUser() : realGetCurrentUser()
+}
+
+export function logOut() {
+  return MOCK_AUTH ? mockLogOut() : realLogOut()
 }
 
 export function getRecommendation(params) {
-  return USE_MOCK ? mockGetRecommendation(params) : realGetRecommendation(params);
+  return MOCK_RECOMMENDATIONS ? mockGetRecommendation(params) : realGetRecommendation(params);
 }
 
 export function getPastRecommendations(steamId) {
-  return USE_MOCK ? mockGetPastRecommendations(steamId) : realGetPastRecommendations(steamId);
+  return MOCK_RECOMMENDATIONS ? mockGetPastRecommendations(steamId) : realGetPastRecommendations(steamId);
 }
 
 export function updatePreferences(preferences) {
-  return USE_MOCK ? mockUpdatePreferences(preferences) : realUpdatePreferences(preferences);
+  return MOCK_RECOMMENDATIONS ? mockUpdatePreferences(preferences) : realUpdatePreferences(preferences);
 }
 // # endregion
 
@@ -39,13 +55,6 @@ export function updatePreferences(preferences) {
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
-
-// Mock user profile data
-const mockProfile = {
-  steamId: '12345678901234567',
-  name: 'SteamUser',
-  avatar: 'https://steamcdn-a.akamaihd.net/steamcommunity/public/images/avatars/ab/abcdef1234567890.jpg',
-};
 
 // Mock game data
 const mockGames = [
@@ -63,31 +72,31 @@ const mockGames = [
   // Add more mock games as needed
 ];
 
-// Mock authentication (returns JWT and profile)
-export async function mockAuthenticateWithSteam() {
-  await delay(500);
-  return {
-    jwt: 'mock-jwt-token',
-    profile: mockProfile,
-    liked: [],
-    disliked: [],
-    pastRecommendations: [],
-  };
+// Mock Steam login URL
+async function mockGetSteamLoginUrl() {
+  await delay(200)
+  return 'https://steamcommunity.com/openid/login?mock=true'
 }
 
-// Mock guest login (returns profile with only Steam ID)
-export async function mockGuestLogin(steamId) {
-  await delay(300);
+// Mock current user profile
+async function mockGetCurrentUser() {
+  await delay(200)
   return {
-    profile: { steamId, name: 'Guest', avatar: '' },
-    liked: [],
-    disliked: [],
-    pastRecommendations: [],
-  };
+    steam_id: '12345678901234567',
+    display_name: 'Mock User',
+    avatar_url: 'https://steamcdn-a.akamaihd.net/steamcommunity/public/images/avatars/ab/abcdef1234567890.jpg',
+    profile_url: 'https://steamcommunity.com/profiles/12345678901234567',
+    last_login: '2025-10-07T12:00:00Z'
+  }
+}
+
+async function mockLogOut() {
+  await delay(100);
+  return { success: true };
 }
 
 // Mock get AI recommendation
-export async function mockGetRecommendation({ steamId, genre, useWishlist }) {
+async function mockGetRecommendation({ genre, useWishlist }) {
   await delay(700);
   // Filter out games already liked/disliked/past (simulate logic)
   return {
@@ -97,13 +106,13 @@ export async function mockGetRecommendation({ steamId, genre, useWishlist }) {
 }
 
 // Mock get past recommendations
-export async function mockGetPastRecommendations(steamId) {
+async function mockGetPastRecommendations() {
   await delay(300);
   return [];
 }
 
 // Mock update liked/disliked/past recommendations
-export async function mockUpdatePreferences({ steamId, liked, disliked, pastRecommendations }) {
+async function mockUpdatePreferences({ liked, disliked, pastRecommendations }) {
   await delay(200);
   return { success: true };
 }
@@ -111,26 +120,33 @@ export async function mockUpdatePreferences({ steamId, liked, disliked, pastReco
 // #endregion
 
 // #region Real API Implementations
-async function realAuthenticateWithSteam() {
-  const res = await api.post('/auth/steam');
-  return res.data;
+async function realGetSteamLoginUrl() {
+  const res = await api.get('/api/auth/steam/login')
+  return res.data.login_url
 }
-async function realGuestLogin(steamId) {
-  const res = await api.post('/auth/guest', { steamId });
-  return res.data;
+
+async function realGetCurrentUser() {
+  const res = await api.get('/api/auth/me')
+  return res.data
 }
+
+async function realLogOut() {
+  const res = await api.post('/api/auth/logout')
+  return res.data
+}
+
 async function realGetRecommendation(params) {
-  const res = await api.post('/recommendation', params);
+  const res = await api.post('/api/recommendations', params);
   return res.data;
 }
 
-export async function realGetPastRecommendations(steamId) {
-  const res = await api.post('/recommendation/past', { steamId });
+export async function realGetPastRecommendations() {
+  const res = await api.get('/api/recommendations/history');
   return res.data;
 }
 
-export async function realUpdatePreferences({ steamId, liked, disliked, pastRecommendations }) {
-  const res = await api.post('/preferences/update', { steamId, liked, disliked, pastRecommendations });
+export async function realUpdatePreferences({ liked, disliked, pastRecommendations }) {
+  const res = await api.post('/api/preferences/update', { liked, disliked, pastRecommendations });
   return { success: true };
 }
 // #endregion

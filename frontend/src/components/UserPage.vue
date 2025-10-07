@@ -1,53 +1,22 @@
 <script setup>
 import { ref } from 'vue'
-import { useUserStore } from '../stores/user'
-import { authenticateWithSteam, guestLogin } from '../services/api'
-const steamId = ref('')
-const userStore = useUserStore()
-const emit = defineEmits(['authenticated', 'guest'])
+import { getSteamLoginUrl } from '../services/api'
 
 const loading = ref(false)
 const errorMsg = ref('')
 const snackbar = ref(false)
 
 async function signInWithSteam() {
-  loading.value = true
-  errorMsg.value = ''
+  loading.value = true;
+  errorMsg.value = '';
   try {
-    const result = await authenticateWithSteam()
-    userStore.setAuthenticated({
-      steamId: result.profile.steamId,
-      profile: result.profile,
-      jwt: result.jwt,
-      liked: result.liked,
-      disliked: result.disliked,
-      pastRecommendations: result.pastRecommendations,
-    })
-    emit('authenticated', {
-      steamId: result.profile.steamId,
-      profile: result.profile,
-      jwt: result.jwt,
-    })
+    const loginUrl = await getSteamLoginUrl();
+    window.location.href = loginUrl; // Redirect to Steam login
   } catch (err) {
-    errorMsg.value = err?.message || 'Failed to authenticate with Steam.'
-    snackbar.value = true
+    errorMsg.value = err?.message || 'Failed to get Steam login URL.';
+    snackbar.value = true;
   } finally {
-    loading.value = false
-  }
-}
-
-async function continueAsGuest() {
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    const result = await guestLogin(steamId.value)
-    userStore.setGuest(result.profile.steamId)
-    emit('guest', result.profile.steamId)
-  } catch (err) {
-    errorMsg.value = err?.message || 'Failed to continue as guest.'
-    snackbar.value = true
-  } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 </script>
@@ -74,23 +43,6 @@ async function continueAsGuest() {
               Sign In with Steam
               <v-progress-circular v-if="loading" indeterminate color="primary" size="20" class="ml-2" />
             </v-btn>
-            <div class="mt-4">
-              <v-text-field
-                v-model="steamId"
-                label="Or enter your 64-bit Steam ID as guest"
-                outlined
-                color="secondary"
-                :disabled="loading"
-              />
-              <v-btn
-                color="accent"
-                :disabled="!steamId || loading"
-                @click="continueAsGuest"
-              >
-                Continue as Guest
-                <v-progress-circular v-if="loading" indeterminate color="primary" size="20" class="ml-2" />
-              </v-btn>
-            </div>
             <v-snackbar v-model="snackbar" color="error" timeout="4000">
               {{ errorMsg }}
             </v-snackbar>

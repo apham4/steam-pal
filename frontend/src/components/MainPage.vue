@@ -1,3 +1,127 @@
+<script setup>
+import { ref, computed } from 'vue'
+import { useUserStore } from '../stores/user'
+import { getRecommendation, updatePreferences } from '../services/api'
+
+const tab = ref(0)
+const showRecommendation = ref(false)
+const userStore = useUserStore()
+const userProfile = computed(() => userStore.profile)
+const recommendation = ref(null)
+const reasoning = ref('')
+const genres = [
+  'Action', 'Adventure', 'RPG', 'Strategy', 'Simulation', 'Puzzle', 'Sports', 'Indie', 'Horror', 'Multiplayer'
+]
+const selectedGenres = ref([])
+const customGenre = ref('')
+const customGenres = ref([])
+const useWishlist = ref(false)
+const loading = ref(false)
+const errorMsg = ref('')
+const snackbar = ref(false)
+
+function addCustomGenre() {
+  if (customGenre.value.trim()) {
+    // Split by comma, trim, and add unique genres
+    const genresToAdd = customGenre.value.split(',').map(g => g.trim()).filter(g => g)
+    genresToAdd.forEach(g => {
+      if (!customGenres.value.includes(g)) {
+        customGenres.value.push(g)
+      }
+    })
+    customGenre.value = ''
+  }
+}
+function removeCustomGenre(idx) {
+  customGenres.value.splice(idx, 1)
+}
+
+function steamStoreUrl(gameId) {
+  return `https://store.steampowered.com/app/${gameId}`
+}
+
+async function fetchRecommendation() {
+  loading.value = true
+  errorMsg.value = ''
+  try {
+    const allGenres = [...selectedGenres.value, ...customGenres.value]
+    const result = await getRecommendation({
+      genres: allGenres, // send array, can be empty
+      useWishlist: useWishlist.value,
+    })
+    recommendation.value = result.game
+    reasoning.value = result.reasoning
+    showRecommendation.value = true
+    userStore.addPastRecommendation(result.game)
+    await updatePreferences({
+      liked: userStore.liked,
+      disliked: userStore.disliked,
+      pastRecommendations: userStore.pastRecommendations,
+    })
+  } catch (err) {
+    errorMsg.value = err?.message || 'Failed to get recommendation.'
+    snackbar.value = true
+  } finally {
+    loading.value = false
+  }
+}
+
+function showPastRecommendation(game) {
+  recommendation.value = game
+  reasoning.value = ''
+  showRecommendation.value = true
+}
+
+function showRecommendationDetails(game) {
+  recommendation.value = game
+  reasoning.value = ''
+  showRecommendation.value = true
+}
+
+async function handlePreferenceUpdate(action, ...args) {
+  loading.value = true
+  errorMsg.value = ''
+  try {
+    action(...args)
+    await updatePreferences({
+      liked: userStore.liked,
+      disliked: userStore.disliked,
+      pastRecommendations: userStore.pastRecommendations,
+    })
+  } catch (err) {
+    errorMsg.value = err?.message || 'Failed to update preferences.'
+    snackbar.value = true
+  } finally {
+    loading.value = false
+  }
+}
+
+function likeRecommendation(game) {
+  return handlePreferenceUpdate(userStore.addLiked, game)
+}
+function dislikeRecommendation(game) {
+  return handlePreferenceUpdate(userStore.addDisliked, game)
+}
+function removePastRecommendation(gameId) {
+  return handlePreferenceUpdate(userStore.removePastRecommendation, gameId)
+}
+function clearPastRecommendations() {
+  return handlePreferenceUpdate(userStore.clearPastRecommendations)
+}
+function removeLiked(gameId) {
+  return handlePreferenceUpdate(userStore.removeLiked, gameId)
+}
+function removeDisliked(gameId) {
+  return handlePreferenceUpdate(userStore.removeDisliked, gameId)
+}
+function moveLikedToDisliked(gameId) {
+  return handlePreferenceUpdate(userStore.moveLikedToDisliked, gameId)
+}
+function moveDislikedToLiked(gameId) {
+  return handlePreferenceUpdate(userStore.moveDislikedToLiked, gameId)
+}
+</script>
+
 <template>
   <v-container fluid>
     <!-- Steam Pal Title Header -->
@@ -19,10 +143,15 @@
         <v-card color="surface" dark>
           <v-card-title class="d-flex align-center">
             <v-avatar size="50" class="mr-2">
-              <img :src="userProfile?.avatar" alt="Avatar" />
+              <template v-if="userProfile?.avatar_url">
+                <img :src="userProfile?.avatar_url" alt="Avatar" style="object-fit: contain; width: 100%; height: 100%;" />
+              </template>
+              <template v-else>
+                <v-icon size="40">mdi-account-circle</v-icon>
+              </template>
             </v-avatar>
-            <span class="font-weight-bold font-size-1">{{ userProfile?.name || "Steam User" }}</span>
-            <span class="ml-2 font-size-1">(Steam ID: {{ userStore.steamId }})</span>
+            <span class="font-weight-bold font-size-1">{{ userProfile?.display_name || "Steam User" }}</span>
+            <span class="ml-2 font-size-1">(Steam ID: {{ userProfile?.steam_id }})</span>
             <v-spacer />
             <v-btn color="secondary" @click="$emit('changeUser')" class="ml-4">Change User</v-btn>
           </v-card-title>
@@ -44,7 +173,7 @@
           <v-tab-item>
             <!-- Get Recommendation tab content -->
             <div v-if="tab === 0" class="d-flex flex-column align-center mt-4" style="gap: 8px;">
-              <div class="genre-checkbox-grid mb-2 d-flex flex-column align-center" style="gap: 4px;">
+              <div class="genre-checkbox-grid d-flex flex-column align-center" style="gap: 4px;">
                 <v-row class="justify-center" style="gap: 0;">
                   <v-col v-for="genre in genres" :key="genre" cols="6" sm="4" md="3" class="py-0 my-0">
                     <v-checkbox
@@ -66,7 +195,7 @@
                   density="compact"
                   class="mt-1"
                   style="width:500px;"
-                  placeholder="Type genres separated by commas."
+                  placeholder="Type in genres and press Enter."
                   @keydown.enter="addCustomGenre"
                   hint="You can enter multiple genres separated by commas."
                   persistent-hint
@@ -84,9 +213,8 @@
                 </div>
               </div>
               <v-checkbox
-                v-if="userStore.role === 'authenticated'"
                 v-model="useWishlist"
-                label="Take my Steam Wishlist into account"
+                label="Consider my Steam Wishlist"
                 color="secondary"
                 hide-details="auto"
               />
@@ -208,18 +336,18 @@
               <div style="max-height: 80px; overflow-y: auto;">{{ reasoning }}</div>
             </v-card>
             <div class="d-flex justify-center mt-4" style="gap:20px;">
-              <v-btn color="success" class="mt-2" @click="likeRecommendation(recommendation)">
-                <span class="mr-2">👍</span> Like
-              </v-btn>
-              <v-btn color="error" class="mt-2" @click="dislikeRecommendation(recommendation)">
-                <span class="mr-2">👎</span> Dislike
-              </v-btn>
-              <v-btn color="info" class="mt-2" :href="steamStoreUrl(recommendation.id)" target="_blank">
-                <span class="mr-2">🛒</span> View on Steam
-              </v-btn>
-              <v-btn v-if="userStore.role === 'authenticated'" color="accent" class="mt-2">
-                <span class="mr-2">⭐</span> Add to Wishlist
-              </v-btn>
+                <v-btn color="success" class="mt-2" @click="likeRecommendation(recommendation)">
+                  <v-icon class="mr-2">mdi-thumb-up</v-icon> Like
+                </v-btn>
+                <v-btn color="error" class="mt-2" @click="dislikeRecommendation(recommendation)">
+                  <v-icon class="mr-2">mdi-thumb-down</v-icon> Dislike
+                </v-btn>
+                <v-btn color="info" class="mt-2" :href="steamStoreUrl(recommendation.id)" target="_blank">
+                  <v-icon class="mr-2">mdi-cart</v-icon> View on Steam
+                </v-btn>
+                <v-btn color="info" class="mt-2">
+                  <v-icon class="mr-2">mdi-star</v-icon> Add to Wishlist
+                </v-btn>
             </div>
           </v-card-text>
         </v-card>
@@ -236,241 +364,6 @@
     </v-row>
   </v-container>
 </template>
-
-<script setup>
-import { ref, computed } from 'vue'
-import { useUserStore } from '../stores/user'
-import { getRecommendation, updatePreferences } from '../services/api'
-
-const tab = ref(0)
-const showRecommendation = ref(false)
-const userStore = useUserStore()
-const userProfile = computed(() => userStore.profile)
-const recommendation = ref(null)
-const reasoning = ref('')
-const genres = [
-  'Action', 'Adventure', 'RPG', 'Strategy', 'Simulation', 'Puzzle', 'Sports', 'Indie', 'Horror', 'Multiplayer'
-]
-const selectedGenres = ref([])
-const customGenre = ref('')
-const customGenres = ref([])
-const useWishlist = ref(false)
-const loading = ref(false)
-const errorMsg = ref('')
-const snackbar = ref(false)
-
-function addCustomGenre() {
-  if (customGenre.value.trim()) {
-    // Split by comma, trim, and add unique genres
-    const genresToAdd = customGenre.value.split(',').map(g => g.trim()).filter(g => g)
-    genresToAdd.forEach(g => {
-      if (!customGenres.value.includes(g)) {
-        customGenres.value.push(g)
-      }
-    })
-    customGenre.value = ''
-  }
-}
-function removeCustomGenre(idx) {
-  customGenres.value.splice(idx, 1)
-}
-
-function steamStoreUrl(gameId) {
-  return `https://store.steampowered.com/app/${gameId}`
-}
-
-async function fetchRecommendation() {
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    const allGenres = [...selectedGenres.value, ...customGenres.value]
-    const result = await getRecommendation({
-      steamId: userStore.steamId,
-      genres: allGenres, // send array, can be empty
-      useWishlist: useWishlist.value,
-    })
-    recommendation.value = result.game
-    reasoning.value = result.reasoning
-    showRecommendation.value = true
-    userStore.addPastRecommendation(result.game)
-    await updatePreferences({
-      steamId: userStore.steamId,
-      liked: userStore.liked,
-      disliked: userStore.disliked,
-      pastRecommendations: userStore.pastRecommendations,
-    })
-  } catch (err) {
-    errorMsg.value = err?.message || 'Failed to get recommendation.'
-    snackbar.value = true
-  } finally {
-    loading.value = false
-  }
-}
-
-function showPastRecommendation(game) {
-  recommendation.value = game
-  reasoning.value = ''
-  showRecommendation.value = true
-}
-
-function showRecommendationDetails(game) {
-  recommendation.value = game
-  reasoning.value = ''
-  showRecommendation.value = true
-}
-
-async function likeRecommendation(game) {
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    userStore.addLiked(game)
-    await updatePreferences({
-      steamId: userStore.steamId,
-      liked: userStore.liked,
-      disliked: userStore.disliked,
-      pastRecommendations: userStore.pastRecommendations,
-    })
-  } catch (err) {
-    errorMsg.value = err?.message || 'Failed to update preferences.'
-    snackbar.value = true
-  } finally {
-    loading.value = false
-  }
-}
-
-async function dislikeRecommendation(game) {
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    userStore.addDisliked(game)
-    await updatePreferences({
-      steamId: userStore.steamId,
-      liked: userStore.liked,
-      disliked: userStore.disliked,
-      pastRecommendations: userStore.pastRecommendations,
-    })
-  } catch (err) {
-    errorMsg.value = err?.message || 'Failed to update preferences.'
-    snackbar.value = true
-  } finally {
-    loading.value = false
-  }
-}
-
-async function removePastRecommendation(gameId) {
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    userStore.removePastRecommendation(gameId)
-    await updatePreferences({
-      steamId: userStore.steamId,
-      liked: userStore.liked,
-      disliked: userStore.disliked,
-      pastRecommendations: userStore.pastRecommendations,
-    })
-  } catch (err) {
-    errorMsg.value = err?.message || 'Failed to update preferences.'
-    snackbar.value = true
-  } finally {
-    loading.value = false
-  }
-}
-
-async function clearPastRecommendations() {
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    userStore.clearPastRecommendations()
-    await updatePreferences({
-      steamId: userStore.steamId,
-      liked: userStore.liked,
-      disliked: userStore.disliked,
-      pastRecommendations: userStore.pastRecommendations,
-    })
-  } catch (err) {
-    errorMsg.value = err?.message || 'Failed to update preferences.'
-    snackbar.value = true
-  } finally {
-    loading.value = false
-  }
-}
-
-async function removeLiked(gameId) {
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    userStore.removeLiked(gameId)
-    await updatePreferences({
-      steamId: userStore.steamId,
-      liked: userStore.liked,
-      disliked: userStore.disliked,
-      pastRecommendations: userStore.pastRecommendations,
-    })
-  } catch (err) {
-    errorMsg.value = err?.message || 'Failed to update preferences.'
-    snackbar.value = true
-  } finally {
-    loading.value = false
-  }
-}
-
-async function removeDisliked(gameId) {
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    userStore.removeDisliked(gameId)
-    await updatePreferences({
-      steamId: userStore.steamId,
-      liked: userStore.liked,
-      disliked: userStore.disliked,
-      pastRecommendations: userStore.pastRecommendations,
-    })
-  } catch (err) {
-    errorMsg.value = err?.message || 'Failed to update preferences.'
-    snackbar.value = true
-  } finally {
-    loading.value = false
-  }
-}
-
-async function moveLikedToDisliked(gameId) {
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    userStore.moveLikedToDisliked(gameId)
-    await updatePreferences({
-      steamId: userStore.steamId,
-      liked: userStore.liked,
-      disliked: userStore.disliked,
-      pastRecommendations: userStore.pastRecommendations,
-    })
-  } catch (err) {
-    errorMsg.value = err?.message || 'Failed to update preferences.'
-    snackbar.value = true
-  } finally {
-    loading.value = false
-  }
-}
-
-async function moveDislikedToLiked(gameId) {
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    userStore.moveDislikedToLiked(gameId)
-    await updatePreferences({
-      steamId: userStore.steamId,
-      liked: userStore.liked,
-      disliked: userStore.disliked,
-      pastRecommendations: userStore.pastRecommendations,
-    })
-  } catch (err) {
-    errorMsg.value = err?.message || 'Failed to update preferences.'
-    snackbar.value = true
-  } finally {
-    loading.value = false
-  }
-}
-</script>
 
 <style scoped>
 .genre-checkbox-grid {

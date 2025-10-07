@@ -2,38 +2,24 @@ import { defineStore } from 'pinia'
 
 export const useUserStore = defineStore('user', {
   state: () => ({
-    steamId: null,
     profile: null,
     jwt: null,
-    role: 'guest', // or 'authenticated'
     liked: [], // array of game objects
     disliked: [], // array of game objects
     pastRecommendations: [], // array of game objects
   }),
   actions: {
-    setGuest(steamId) {
-      this.steamId = steamId
-      this.role = 'guest'
-      this.profile = null
-      this.jwt = null
-      this.liked = []
-      this.disliked = []
-      this.pastRecommendations = []
+    setJwt(token) {
+      this.jwt = token
+      localStorage.setItem('jwt', token)
     },
-    setAuthenticated({ steamId, profile, jwt, liked = [], disliked = [], pastRecommendations = [] }) {
-      this.steamId = steamId
+    setProfile(profile) {
       this.profile = profile
-      this.jwt = jwt
-      this.role = 'authenticated'
-      this.liked = liked
-      this.disliked = disliked
-      this.pastRecommendations = pastRecommendations
     },
     logout() {
       this.steamId = null
       this.profile = null
       this.jwt = null
-      this.role = 'guest'
       this.liked = []
       this.disliked = []
       this.pastRecommendations = []

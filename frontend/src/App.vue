@@ -1,28 +1,59 @@
-<template>
-  <component :is="currentView" @authenticated="handleAuthenticated" @guest="handleGuest" @changeUser="handleChangeUser" />
-</template>
-
 <script setup>
 import { ref, markRaw } from 'vue'
 import UserPage from './components/UserPage.vue'
 import MainPage from './components/MainPage.vue'
+import { onMounted, computed } from 'vue'
 import { useUserStore } from './stores/user'
+import { getCurrentUser, logOut } from './services/api'
 
 const currentView = ref(markRaw(UserPage))
 const userStore = useUserStore()
+const userDisplayName = computed(() => userStore.profile?.display_name)
 
-function handleAuthenticated({ steamId, profile, jwt }) {
-  userStore.setAuthenticated({ steamId, profile, jwt })
-  currentView.value = markRaw(MainPage)
-}
+onMounted(async () => {
+  // Check for ?token=JWT_TOKEN in the URL
+  const urlParams = new URLSearchParams(window.location.search)
+  const token = urlParams.get('token')
+  if (token) {
+    userStore.setJwt(token)
+    // Clean up the URL (remove token param)
+    window.history.replaceState({}, document.title, window.location.pathname)
+    // Fetch user profile
+    try {
+      const profile = await getCurrentUser()
+      userStore.profile = profile
+      // Switch to MainPage if authenticated
+      currentView.value = markRaw(MainPage)
+      updateTitle()
+    } catch (err) {
+      // Handle error (optional)
+      console.error('Failed to fetch user profile:', err)
+    }
+  } else if (userStore.isAuthenticated) {
+    // If already authenticated (e.g., from previous session), show MainPage
+    currentView.value = markRaw(MainPage)
+    updateTitle()
+  } else {
+    currentView.value = markRaw(UserPage)
+    updateTitle()
+  }
+})
 
-function handleGuest(steamId) {
-  userStore.setGuest(steamId)
-  currentView.value = markRaw(MainPage)
+function updateTitle() {
+  if (userDisplayName.value) {
+    document.title = `Steam Pal | ${userDisplayName.value}`
+  } else {
+    document.title = 'Steam Pal'
+  }
 }
 
 function handleChangeUser() {
   userStore.logout()
+  logOut() // Call the logout API
   currentView.value = markRaw(UserPage)
 }
 </script>
+
+<template>
+  <component :is="currentView" @changeUser="handleChangeUser" />
+</template>
