@@ -39,6 +39,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 STEAM_API_KEY = os.getenv("STEAM_API_KEY", "your-steam-api-key")  # Get from https://steamcommunity.com/dev/apikey
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+FRONTEND_AUTH_CALLBACK_URL = os.getenv("FRONTEND_AUTH_CALLBACK_URL", "http://localhost:5173/auth-callback")
 TEST_SERVER_URL = os.getenv("TEST_SERVER_URL", "http://localhost:3000")
 REDIRECT_URI = "http://localhost:8000/api/auth/steam/callback"
 
@@ -55,6 +56,7 @@ origins = [
     "http://localhost:8000",  # Backend server
     "http://127.0.0.1:8000",
     FRONTEND_URL,
+    FRONTEND_AUTH_CALLBACK_URL
 ]
 
 app.add_middleware(
@@ -223,7 +225,7 @@ def steam_auth_callback(request: Request):
             redirect_url = f"{TEST_SERVER_URL}/test_steam_oauth.html?token={access_token}"
         else:
             # Redirect to frontend
-            redirect_url = f"{FRONTEND_URL}?token={access_token}"
+            redirect_url = f"{FRONTEND_AUTH_CALLBACK_URL}?token={access_token}"
         
         print(f"[steam_auth_callback] successful login for steam_id={steam_id}, redirecting to {redirect_url}")
         return RedirectResponse(url=redirect_url)

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Steam Pal Auth Callback</title>
+</head>
+<body>
+  <script>
+    // Parse token from URL
+    const urlParams = new URLSearchParams(window.location.search)
+    const token = urlParams.get('token')
+    if (token && window.opener) {
+      // Send token to opener tab
+      window.opener.postMessage({ steamPalToken: token }, window.location.origin)
+      window.close()
+    } else {
+      document.body.innerText = 'Authentication failed or no token found.'
+    }
+  </script>
+</body>
+</html>

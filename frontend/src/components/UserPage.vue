@@ -11,7 +11,7 @@ async function signInWithSteam() {
   errorMsg.value = '';
   try {
     const loginUrl = await getSteamLoginUrl();
-    window.location.href = loginUrl; // Redirect to Steam login
+    window.open(loginUrl, '_blank'); // Open login URL in a new tab
   } catch (err) {
     errorMsg.value = err?.message || 'Failed to get Steam login URL.';
     snackbar.value = true;
