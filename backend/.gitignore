@@ -1,0 +1,66 @@
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# Backup Files
+backups/
+*.backup
+*.bak
+*.old
+*.temp
+*.phase*
+.env.phase*
+main.backup.py
+steam_api.backup.py
+models.backup.py
+requirements.backup.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# Database Files
+*.db
+*.sqlite
+*.sqlite3
+steampal.db
+
+# Logs
+*.log
+logs/
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary Files
+*.tmp
+*~
+.~*

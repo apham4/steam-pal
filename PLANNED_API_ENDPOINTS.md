@@ -3,6 +3,7 @@
 ### Base URL
 http://localhost:8000
 
+
 ## Feature 1: Steam OAuth Authentication
 
 #### 1. Get Steam Login URL
@@ -16,12 +17,39 @@ http://localhost:8000
 }
 ```
 
+
 #### 2. Steam OAuth Callback (Automatic)
 - **Endpoint**: `GET /api/auth/steam/callback`
 - **Description**: Handles Steam OAuth callback and redirects to frontend with JWT token
 - **Authentication**: None (handled by Steam)
-- **Flow**: Steam redirects here → Backend verifies → Redirects to frontend with token
-- **Redirect URL**: `http://localhost:5173?token=JWT_TOKEN_HERE`
+- **Query Parameters:**
+- `openid.ns` - OpenID namespace
+- `openid.mode` - OpenID mode (should be "id_res")
+- `openid.op_endpoint` - OpenID endpoint
+- `openid.claimed_id` - User's Steam ID URL
+- `openid.identity` - User identity
+- `openid.return_to` - Return URL
+- `openid.response_nonce` - Nonce
+- `openid.assoc_handle` - Association handle
+- `openid.signed` - Signed fields
+- `openid.sig` - Signature
+
+- **Response:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "expires_in": 86400,
+  "user": {
+    "steam_id": "76561197960287930",
+    "display_name": "PlayerName",
+    "avatar_url": "https://avatars.steamstatic.com/...",
+    "profile_url": "https://steamcommunity.com/profiles/76561197960287930",
+    "last_login": "2025-10-07T12:00:00"
+  }
+}
+```
+
 
 #### 3. Get Current User
 - **Endpoint**: `GET /api/auth/me`
@@ -58,46 +86,38 @@ Authorization: Bearer YOUR_JWT_TOKEN
 
 ## Feature 2: AI-Powered Game Recommendations
 
-### Get Game Recommendation
+### 5. Get Game Recommendation
 - **Endpoint**: `POST /api/recommendations`
 - **Description**: Get AI-powered game recommendations
 - **Authentication**: Required (Bearer token)
 - **Headers**:
 ```
-Authorization: Bearer YOUR_JWT_TOKEN
+Authorization: Bearer <access_token>
 Content-Type: application/json
 ```
 - **Request Body**:
 ```json
 {
-  "genres": ["RPG", "Action"],
-  "tags": ["Story Rich", "Open World"],
-  "needs format change".
+  "steamId": "76561197960287930",
+  "genre": "RPG",
+  "useWishlist": false
 }
 ```
 - **Response**:
 ```json
 {
-  "game_id": "292030",
-  "game_name": "The Witcher 3: Wild Hunt",
-  "reasoning": "Based on your Steam profile and interest in RPG and Story Rich games, this is a perfect match",
-  "needs format change".
-}
-```
-
-## Feature 3: Recommendation History (not yet implemented)
-- **Endpoint**: `GET /api/recommedations/history`
-- **Description**: Get user's past recommendation history
-- **Authentication**: Required (Bearer token)
-- **Response**: 
-```json
-{
-  "game_id": "292030",
-  "game_name": "The Witcher 3: Wild Hunt",
-  "reasoning": "Based on your Steam profile and interest in RPG and Story Rich games, this is a perfect match",
-  "recommended_date": "2025-09-30T12:00:00Z",
-  "user_feedback": "liked",
-  "will add more stuff".
+  "game": {
+    "id": "292030",
+    "title": "The Witcher 3: Wild Hunt",
+    "thumbnail": "https://cdn.akamai.steamstatic.com/steam/apps/292030/header.jpg",
+    "releaseDate": "May 18, 2015",
+    "publisher": "CD PROJEKT RED",
+    "developer": "CD PROJEKT RED",
+    "price": "$39.99",
+    "salePrice": "$9.99",
+    "description": "As war rages on throughout the Northern Realms..."
+  },
+  "reasoning": "Based on your Steam library of 150 games and your interest in RPG games, we recommend **The Witcher 3: Wild Hunt**.\n\nAs war rages on throughout the Northern Realms...\n\n**Genres:** RPG, Open World, Action\n**Released:** May 18, 2015\n**Developer:** CD PROJEKT RED\n\n**On Sale!** ~~$39.99~~ → $9.99"
 }
 ```
 
