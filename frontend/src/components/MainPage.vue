@@ -129,7 +129,7 @@ function moveDislikedToLiked(gameId) {
       <v-col cols="12" md="8">
         <div class="d-flex flex-column align-center">
           <div class="d-flex align-center justify-center mb-2">
-            <v-icon size="48" color="secondary" class="mr-2">mdi-steam</v-icon>
+            <img src="/icon.png" alt="Steam Pal Icon" style="width:48px; height:48px;" class="mr-2" />
             <span class="steam-title">Steam Pal</span>
           </div>
           <div class="subtitle text-center mb-2">AI-Powered Game Recommendations for Steam Users</div>
@@ -166,13 +166,14 @@ function moveDislikedToLiked(gameId) {
           <v-tabs v-model="tab" background-color="primary" dark class="justify-center">
             <v-tab>Get Recommendation</v-tab>
             <v-tab>Past Recommendations</v-tab>
-            <v-tab>Manage Preferences</v-tab>
+            <!-- [V2 TODO] Preferences <v-tab>Manage Preferences</v-tab> -->
           </v-tabs>
         </div>
         <v-tabs-items v-model="tab">
           <v-tab-item>
             <!-- Get Recommendation tab content -->
             <div v-if="tab === 0" class="d-flex flex-column align-center mt-4" style="gap: 8px;">
+            <!-- [V2 TODO] Filters
               <div class="genre-checkbox-grid d-flex flex-column align-center" style="gap: 4px;">
                 <v-row class="justify-center" style="gap: 0;">
                   <v-col v-for="genre in genres" :key="genre" cols="6" sm="4" md="3" class="py-0 my-0">
@@ -212,6 +213,7 @@ function moveDislikedToLiked(gameId) {
                   >{{ genre }}</v-chip>
                 </div>
               </div>
+              -->
               <v-checkbox
                 v-model="useWishlist"
                 label="Consider my Steam Wishlist"
@@ -336,12 +338,14 @@ function moveDislikedToLiked(gameId) {
               <div style="max-height: 80px; overflow-y: auto;">{{ reasoning }}</div>
             </v-card>
             <div class="d-flex justify-center mt-4" style="gap:20px;">
+                <!-- [V2 TODO] Preferences 
                 <v-btn color="success" class="mt-2" @click="likeRecommendation(recommendation)">
                   <v-icon class="mr-2">mdi-thumb-up</v-icon> Like
                 </v-btn>
                 <v-btn color="error" class="mt-2" @click="dislikeRecommendation(recommendation)">
                   <v-icon class="mr-2">mdi-thumb-down</v-icon> Dislike
                 </v-btn>
+                -->
                 <v-btn color="info" class="mt-2" :href="steamStoreUrl(recommendation.id)" target="_blank">
                   <v-icon class="mr-2">mdi-cart</v-icon> View on Steam
                 </v-btn>

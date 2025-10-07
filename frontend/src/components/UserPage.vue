@@ -28,7 +28,7 @@ async function signInWithSteam() {
         <v-card class="pa-6" color="primary" dark>
           <v-card-text>
             <div class="d-flex mb-2">
-                <v-icon size="48" color="secondary" class="mr-2">mdi-steam</v-icon>
+                <img src="/icon.png" alt="Steam Pal Icon" style="width:48px; height:48px;" class="mr-2" />
                 <span class="steam-title">Steam Pal</span>
             </div>
             <div class="subtitle mb-6">AI-Powered Game Recommendations for Steam Users</div>
