@@ -1,40 +1,43 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Optional
 from datetime import datetime
 
 # Pydantic models define the "shape" of your API data.
 
 class User(BaseModel):
+    """Model for a user"""
     steam_id: str
     display_name: str
-    avatar_url: Optional[str] = None
-    profile_url: Optional[str] = None
+    avatar_url: str = ""
+    profile_url: str = ""
     last_login: Optional[datetime] = None
 
-class SteamAuthCallback(BaseModel):
-    """Model for Steam OpenID callback parameters"""
-    openid_mode: str
-    openid_ns: str
-    openid_op_endpoint: str
-    openid_claimed_id: str
-    openid_identity: str
-    openid_return_to: str
-    openid_response_nonce: str
-    openid_assoc_handle: str
-    openid_signed: str
-    openid_sig: str
-
 class Token(BaseModel):
+    """Model for JWT token"""
     access_token: str
     token_type: str
     expires_in: int
     user: User
 
-class RecommendationFilters(BaseModel):
-    genres: Optional[List[str]] = None
-    tags: Optional[List[str]] = None
+class RecommendationRequest(BaseModel):
+    """Model for recommendation request"""
+    steamId: str
+    genre: Optional[str] = None
+    useWishlist: bool = False
+
+class GameDetail(BaseModel):
+    """Model for detailed game information"""
+    id: str
+    title: str
+    thumbnail: str = ""
+    releaseDate: str = ""
+    publisher: str = ""
+    developer: str = ""
+    price: str = ""
+    salePrice: str = ""
+    description: str = ""
 
 class Recommendation(BaseModel):
-    game_id: str
-    game_name: str
+    """Model for a game recommendation"""
+    game: GameDetail
     reasoning: str
