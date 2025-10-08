@@ -12,13 +12,6 @@ class User(BaseModel):
     profile_url: str = ""
     last_login: Optional[datetime] = None
 
-class Token(BaseModel):
-    """Model for JWT token"""
-    access_token: str
-    token_type: str
-    expires_in: int
-    user: User
-
 class RecommendationRequest(BaseModel):
     """Model for recommendation request"""
     steamId: str

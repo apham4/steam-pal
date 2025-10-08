@@ -1,6 +1,7 @@
-from fastapi import FastAPI, Depends, HTTPException, Query, status, Request
+from fastapi import FastAPI, Depends, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import RedirectResponse
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 import re
@@ -10,7 +11,7 @@ import random
 import httpx
 from typing import Optional
 
-from models import User, Token, RecommendationRequest, GameDetail,Recommendation
+from models import User, RecommendationRequest, GameDetail, Recommendation
 from steam_api import (
     fetch_game_details,
     fetch_user_owned_games,
@@ -30,14 +31,26 @@ app = FastAPI(
     description="Steam companion app with OAuth authentication")
 
 # CONFIGURATION
+
+# Security
 SECRET_KEY = os.getenv("SECRET_KEY", "your-generated-secret-jwt-key")
-ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRATION_HOURS = int(os.getenv("JWT_EXPIRATION_HOURS", "24"))
-API_TIMEOUT = int(os.getenv("API_TIMEOUT_SECONDS", "10"))
-STEAM_API_KEY = os.getenv("STEAM_API_KEY", "your-steam-web-api-key")  
+
+# Steam API
+STEAM_API_KEY = os.getenv("STEAM_API_KEY", "your-steam-web-api-key")
+STEAM_OPENID_URL = os.getenv("STEAM_OPENID_URL", "https://steamcommunity.com/openid/login")
+
+# Frontend URLs
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 FRONTEND_AUTH_CALLBACK_URL = os.getenv("FRONTEND_AUTH_CALLBACK_URL", "http://localhost:5173/auth-callback")
-STEAM_OPENID_URL = os.getenv("STEAM_OPENID_URL", "https://steamcommunity.com/openid/login")
+
+# Backend URLs
+BACKEND_AUTH_CALLBACK_URL = os.getenv("BACKEND_AUTH_CALLBACK_URL", "http://localhost:8000/api/auth/steam/callback")
+BACKEND_REALM = "http://localhost:8000"
+
+# API Configuration
+API_TIMEOUT_SECONDS = int(os.getenv("API_TIMEOUT_SECONDS", "10"))
 
 # CORS MIDDLEWARE
 app.add_middleware(
@@ -45,8 +58,6 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",  # Frontend
         "http://127.0.0.1:5173",
-        "http://localhost:8000",  # Backend
-        "http://127.0.0.1:8000",
         FRONTEND_URL,
         FRONTEND_AUTH_CALLBACK_URL
     ],
@@ -66,7 +77,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         data: Data to encode in the token (e.g. user info)
         expires_delta: Optional custom expiration time
     Returns:
-        Encoded JWT token as a string
+        Encoded JWT token string
     """
     to_encode = data.copy()
     if expires_delta:
@@ -75,12 +86,14 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
 
     to_encode.update({"exp": expire})
-    encode_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encode_jwt
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     """
-    Verify JWT token from Authorization header and return user data
+    Verify JWT token from Authorization header
+    
     Args:
         credentials: HTTP Bearer token from request header
     Returns:
@@ -120,30 +133,29 @@ def health_check():
     return {
         "status": "healthy", 
         "timestamp": datetime.utcnow().isoformat()
-        }
+    }
 
 # AUTHENTICATION ENDPOINTS
 @app.get("/api/auth/steam/login")
 def steam_login():
     """
     Initiate Steam OpenID authentication
-    Returns:
-        Steam OpenID authentication URL
+    Returns Steam OpenID login URL for frontend redirection
     """
     params = {
         'openid.ns': 'http://specs.openid.net/auth/2.0',
         'openid.mode': 'checkid_setup',
-        'openid.return_to': f"{FRONTEND_URL}/auth/callback",
-        'openid.realm': FRONTEND_URL,
+        'openid.return_to': BACKEND_AUTH_CALLBACK_URL,
+        'openid.realm': BACKEND_REALM,
         'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select',
         'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select',
     }
     
     query_string = "&".join([f"{k}={v}" for k, v in params.items()])
-    auth_url = f"{STEAM_OPENID_URL}?{query_string}"
+    login_url = f"{STEAM_OPENID_URL}?{query_string}"
 
-    print(f"[steam_login] Generated auth URL for frontend: {auth_url}")
-    return {"auth_url": auth_url}
+    print(f"[steam_login] Generated login URL")
+    return {"login_url": login_url}
 
 @app.get("/api/auth/steam/callback")
 async def steam_auth_callback(
@@ -159,18 +171,13 @@ async def steam_auth_callback(
     openid_sig: str = Query(..., alias="openid.sig"),
 ):
     """
-    Handle Steam OpenID callback and create JWT token
-    Args:
-        openid_*: OpenID parameters from Steam authentication
-    Returns:
-        JWT token and user info
-    Raises:
-        HTTPException: If authentication fails
+    Handle Steam OpenID callback and redirect to frontend with JWT token
     """
     print("[steam_auth_callback] Received Steam callback")
     # Verify the OpenID response
     if openid_mode != "id_res":
         raise HTTPException(status_code=400, detail="Invalid OpenID response")
+    
     # Verify response with Steam
     params = {
         "openid.ns": openid_ns,
@@ -185,7 +192,7 @@ async def steam_auth_callback(
         "openid.sig": openid_sig
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=API_TIMEOUT_SECONDS) as client:
         response = await client.post(STEAM_OPENID_URL, data=params)
 
     if "is_valid:true" not in response.text:
@@ -206,54 +213,42 @@ async def steam_auth_callback(
         # Fallback if Steam API fails
         print(f"[steam_auth_callback] Could not fetch profile, using fallback")
         profile = {
-            "steam_id": steam_id,
             "personaname": f"User_{steam_id[-4:]}",
             "avatarfull": "",
             "profileurl": f"https://steamcommunity.com/profiles/{steam_id}"
         }
 
-    # Create user object
-    user = User(
-        steam_id=steam_id,
-        display_name=profile.get("personaname", f"User_{steam_id[-4:]}"),
-        avatar_url=profile.get("avatarfull", ""),
-        profile_url=profile.get("profileurl", f"https://steamcommunity.com/profiles/{steam_id}"),
-        last_login=datetime.utcnow()
-    )
-
     # Create JWT token
     access_token = create_access_token(
         data={
-            "steam_id": user.steam_id,
-            "display_name": user.display_name,
-            "avatar_url": user.avatar_url,
-            "profile_url": user.profile_url,
+            "sub": steam_id,
+            "display_name": profile.get("personaname", f"User_{steam_id[-4:]}"),
+            "avatar_url": profile.get("avatarfull", ""),
+            "profile_url": profile.get("profileurl", f"https://steamcommunity.com/profiles/{steam_id}"),
         }
     )
 
-    # Return token response
-    return Token(
-        access_token=access_token,
-        token_type="bearer",
-        expires_in=JWT_EXPIRATION_HOURS * 3600,
-        user=user
-    )
+    # Redirect to frontend with token as query parameter
+    redirect_url = f"{FRONTEND_URL}?token={access_token}"
+    print(f"[steam_auth_callback] Redirecting to: {redirect_url}")
+    return RedirectResponse(url=redirect_url)
 
 @app.get("/api/auth/me", response_model=User)
 def get_current_user(current_user: dict = Depends(verify_token)):
     """
-    Get current authenticated user
+    Get current authenticated user information
+    Requires valid JWT token in Authorization header: "Bearer <token>"
     Args:
         current_user: Decoded JWT token payload
     Returns:
-        User information from token
+        User model with steam_id, display_name, avatar_url, profile_url
     """
     return User(
-        steam_id=current_user["steam_id"],
-        display_name=current_user["display_name"],
+        steam_id=current_user["sub"],
+        display_name=current_user.get("display_name", "Unknown"),
         avatar_url=current_user.get("avatar_url", ""),
         profile_url=current_user.get("profile_url", ""),
-        last_login=datetime.utcnow()    
+        last_login=datetime.utcnow()
     )
 
 # LOGOUT ENDPOINT
@@ -269,10 +264,8 @@ async def get_recommendation(
     current_user: dict = Depends(verify_token)
 ):
     """
-    Get AI-powered game recommendation
-    Args:
-        request: Game recommendation request
-        current_user: Authenticated user from JWT token
+    Get AI-powered game recommendation based on user's Steam library
+    Requires authentication via JWT token in Authorization header.
     Request format:
     {
         "steamId": "76561197960287930",
@@ -292,7 +285,7 @@ async def get_recommendation(
             "salePrice": "$9.99",
             "description": "..."
         },
-        "reasoning": "Based on your preference..."
+        "reasoning": "Based on your Steam library of 150 games..."
     }
     """
     print(f"\n{'='*70}")
@@ -302,22 +295,22 @@ async def get_recommendation(
     
     try:
         # Step 1: Fetch user's owned games from Steam
-        print("Step 1: Fetching user's game library...")
+        print("Fetching user's game library...")
         user_games = fetch_user_owned_games(request.steamId)
         
         if not user_games:
-            print("[get_recommendation] Could not fetch user library (may be private or API error)")
+            print("Could not fetch user library (may be private or API error)")
         
         user_game_ids = {str(game["appid"]) for game in user_games}
         print(f"User owns {len(user_game_ids)} games")
         
         # Step 2: Get popular game candidates
-        print("Step 2: Getting popular game candidates...")
+        print("Getting popular game candidates...")
         candidate_game_ids = get_popular_game_ids(limit=50)
         print(f"Found {len(candidate_game_ids)} candidate games")
         
         # Step 3: Filter out games user already owns
-        print("Step 3: Filtering out owned games...")
+        print("[Step 3] Filtering out owned games...")
         new_games = [gid for gid in candidate_game_ids if gid not in user_game_ids]
         
         if not new_games:
@@ -359,7 +352,7 @@ async def get_recommendation(
         if not raw_game_data:
             raise HTTPException(
                 status_code=500,
-                detail=f"Could not fetch game details from Steam API"
+                detail="Could not fetch game details from Steam API"
             )
         
         print(f"[Step 6] Fetched: {raw_game_data.get('name', 'Unknown')}")
