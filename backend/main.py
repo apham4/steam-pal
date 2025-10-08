@@ -86,7 +86,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
 
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=JWT_ALGORITHM)
     return encoded_jwt
 
 
@@ -103,7 +103,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
     """
     try:
         token = credentials.credentials
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
 
         steam_id: str = payload.get("sub")
         if steam_id is None:
@@ -200,7 +200,7 @@ async def steam_auth_callback(
         raise HTTPException(status_code=400, detail="Invalid Steam OpenID verification")
     
     # Extract Steam ID from claimed_id
-    match = re.search(r"http://steamcommunity\.com/openid/id/(\d+)", openid_claimed_id)
+    match = re.search(r"https?://steamcommunity\.com/openid/id/(\d+)", openid_claimed_id)
     if not match:
         raise HTTPException(status_code=400, detail="Could not extract Steam ID")
     steam_id = match.group(1)
@@ -229,7 +229,7 @@ async def steam_auth_callback(
     )
 
     # Redirect to frontend with token as query parameter
-    redirect_url = f"{FRONTEND_URL}?token={access_token}"
+    redirect_url = f"{FRONTEND_AUTH_CALLBACK_URL}?token={access_token}"
     print(f"[steam_auth_callback] Redirecting to: {redirect_url}")
     return RedirectResponse(url=redirect_url)
 
