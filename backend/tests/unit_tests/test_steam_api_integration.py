@@ -2,13 +2,20 @@
 
 import sys
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
-
 # Add backend directory to path
-sys.path.insert(0, os.path.dirname(__file__))
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(BACKEND_DIR))
+
+# Load environment variables from .env file
+env_path = BACKEND_DIR / '.env'
+if env_path.exists():
+    load_dotenv(env_path)
+else:
+    print(f"Warning: .env file not found at {env_path}")
+    load_dotenv()
 
 from steam_api import (
     test_steam_api_connection,
