@@ -214,12 +214,14 @@ function moveDislikedToLiked(gameId) {
                 </div>
               </div>
               -->
+              <!-- [ADDITIONAL] Wishlist-related features
               <v-checkbox
                 v-model="useWishlist"
                 label="Consider my Steam Wishlist"
                 color="secondary"
                 hide-details="auto"
               />
+              -->
               <div class="d-flex justify-center">
                 <v-btn color="accent" @click="fetchRecommendation" :disabled="loading" class="elevation-4 px-6 py-3 text-h6 d-flex align-center" style="min-width:220px;">
                   <template v-if="loading">
@@ -349,9 +351,11 @@ function moveDislikedToLiked(gameId) {
                 <v-btn color="info" class="mt-2" :href="steamStoreUrl(recommendation.id)" target="_blank">
                   <v-icon class="mr-2">mdi-cart</v-icon> View on Steam
                 </v-btn>
+                <!-- [ADDITIONAL] Wishlist-related features
                 <v-btn color="info" class="mt-2">
                   <v-icon class="mr-2">mdi-star</v-icon> Add to Wishlist
                 </v-btn>
+                -->
             </div>
           </v-card-text>
         </v-card>
