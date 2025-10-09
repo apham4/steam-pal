@@ -43,7 +43,7 @@ STEAM_OPENID_URL = os.getenv("STEAM_OPENID_URL", "https://steamcommunity.com/ope
 
 # Frontend URLs
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
-FRONTEND_AUTH_CALLBACK_URL = os.getenv("FRONTEND_AUTH_CALLBACK_URL", "http://localhost:5173/auth-callback")
+FRONTEND_AUTH_CALLBACK_URL = os.getenv("FRONTEND_AUTH_CALLBACK_URL", "http://localhost:5173/auth-callback.html")
 
 # Backend URLs
 BACKEND_AUTH_CALLBACK_URL = os.getenv("BACKEND_AUTH_CALLBACK_URL", "http://localhost:8000/api/auth/steam/callback")
