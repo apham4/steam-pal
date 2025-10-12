@@ -17,7 +17,6 @@ export const useUserStore = defineStore('user', {
       this.profile = profile
     },
     logout() {
-      this.steamId = null
       this.profile = null
       this.jwt = null
       this.liked = []

@@ -4,7 +4,7 @@ import UserPage from './components/UserPage.vue'
 import MainPage from './components/MainPage.vue'
 import { onMounted, computed } from 'vue'
 import { useUserStore } from './stores/user'
-import { getCurrentUser, logOut } from './services/api'
+import { logUserLogin, getCurrentUser, logOut } from './services/api'
 
 const currentView = ref(markRaw(UserPage))
 const userStore = useUserStore()
@@ -23,9 +23,10 @@ onMounted(() => {
       // Fetch user profile
       try {
         const profile = await getCurrentUser()
-        userStore.profile = profile
+        userStore.setProfile(profile)
         // Switch to MainPage if authenticated
         currentView.value = markRaw(MainPage)
+        logUserLogin() // Log the login event
       } catch (err) {
         // Handle errors (e.g., invalid token)
         console.error('Failed to fetch user profile:', err)

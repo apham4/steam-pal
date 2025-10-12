@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useUserStore } from '../stores/user'
-import { getRecommendation, updatePreferences } from '../services/api'
+import { getRecommendation, updatePreferences, logRecommendationRequest, logRecommendationActionTaken } from '../services/api'
 
 const tab = ref(0)
 const showRecommendation = ref(false)
@@ -44,6 +44,7 @@ async function fetchRecommendation() {
   loading.value = true
   errorMsg.value = ''
   try {
+    await logRecommendationRequest();
     const allGenres = [...selectedGenres.value, ...customGenres.value]
     const result = await getRecommendation({
       genres: allGenres, // send array, can be empty
@@ -96,11 +97,16 @@ async function handlePreferenceUpdate(action, ...args) {
   }
 }
 
-function likeRecommendation(game) {
+async function likeRecommendation(game) {
+  await logRecommendationActionTaken('like', game.id);
   return handlePreferenceUpdate(userStore.addLiked, game)
 }
-function dislikeRecommendation(game) {
+async function dislikeRecommendation(game) {
+  await logRecommendationActionTaken('dislike', game.id);
   return handlePreferenceUpdate(userStore.addDisliked, game)
+}
+async function handleViewOnSteam(game) {
+  await logRecommendationActionTaken('view_store', game.id);
 }
 function removePastRecommendation(gameId) {
   return handlePreferenceUpdate(userStore.removePastRecommendation, gameId)
@@ -348,7 +354,7 @@ function moveDislikedToLiked(gameId) {
                   <v-icon class="mr-2">mdi-thumb-down</v-icon> Dislike
                 </v-btn>
                 -->
-                <v-btn color="info" class="mt-2" :href="steamStoreUrl(recommendation.id)" target="_blank">
+                <v-btn color="info" class="mt-2" @click="handleViewOnSteam(recommendation)" :href="steamStoreUrl(recommendation.id)" target="_blank">
                   <v-icon class="mr-2">mdi-cart</v-icon> View on Steam
                 </v-btn>
                 <!-- [ADDITIONAL] Wishlist-related features

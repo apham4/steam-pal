@@ -5,6 +5,7 @@ import { useUserStore } from '../stores/user'
 // Toggle this to switch between mock and real API
 const MOCK_AUTH = false;
 const MOCK_RECOMMENDATIONS = true;
+const MOCK_AUDIT = true;
 
 // Axios instance for real API
 const api = axios.create({
@@ -41,12 +42,24 @@ export function getRecommendation(params) {
   return MOCK_RECOMMENDATIONS ? mockGetRecommendation(params) : realGetRecommendation(params);
 }
 
-export function getPastRecommendations(steamId) {
-  return MOCK_RECOMMENDATIONS ? mockGetPastRecommendations(steamId) : realGetPastRecommendations(steamId);
+export function getPastRecommendations() {
+  return MOCK_RECOMMENDATIONS ? mockGetPastRecommendations() : realGetPastRecommendations();
 }
 
 export function updatePreferences(preferences) {
   return MOCK_RECOMMENDATIONS ? mockUpdatePreferences(preferences) : realUpdatePreferences(preferences);
+}
+
+export function logUserLogin() {
+  return MOCK_AUDIT ? Promise.resolve({ success: true }) : realLogUserLogin();
+}
+
+export function logRecommendationRequest() {
+  return MOCK_AUDIT ? Promise.resolve({ success: true }) : realLogRecommendationRequest();
+}
+
+export function logRecommendationActionTaken(actionType, recommendationId) {
+  return MOCK_AUDIT ? Promise.resolve({ success: true }) : realLogRecommendationActionTaken(actionType, recommendationId);
 }
 // # endregion
 
@@ -140,13 +153,60 @@ async function realGetRecommendation(params) {
   return res.data;
 }
 
-export async function realGetPastRecommendations() {
+async function realGetPastRecommendations() {
   const res = await api.get('/api/recommendations/history');
   return res.data;
 }
 
-export async function realUpdatePreferences({ liked, disliked, pastRecommendations }) {
+async function realUpdatePreferences({ liked, disliked, pastRecommendations }) {
   const res = await api.post('/api/preferences/update', { liked, disliked, pastRecommendations });
   return { success: true };
+}
+
+async function realLogUserLogin() {
+  const userId = useUserStore()?.profile?.steam_id;
+  const timestamp = new Date().toISOString();
+
+  if (!userId) {
+    throw new Error('Missing userId (steam_id) in user store profile');
+  }
+
+  const res = await api.post('/api/admin/events/logins', {
+    userId,
+    timestamp,
+  });
+  return res.data;
+}
+
+async function realLogRecommendationRequest() {
+  const userId = useUserStore()?.profile?.steam_id;
+  const timestamp = new Date().toISOString();
+
+  if (!userId) {
+    throw new Error('Missing userId (steam_id) in user store profile');
+  }
+
+  const res = await api.post('/api/admin/events/recommendations', {
+    userId,
+    timestamp,
+  });
+  return res.data;
+}
+
+async function realLogRecommendationActionTaken(actionType, recommendationId) {
+  const userId = useUserStore()?.profile?.steam_id;
+  const timestamp = new Date().toISOString();
+
+  if (!userId) {
+    throw new Error('Missing userId (steam_id) in user store profile');
+  }
+
+  const res = await api.post('/api/admin/events/actions', {
+    userId,
+    actionType,
+    recommendationId,
+    timestamp,
+  });
+  return res.data;
 }
 // #endregion

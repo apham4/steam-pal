@@ -121,4 +121,94 @@ Content-Type: application/json
 }
 ```
 
+## Feature 4: Admin Dashboard
 
+### Overview
+Endpoints for admin dashboard statistics, including logins, recommendation requests, actions taken, and aggregate/average stats. All endpoints support filtering by date range and aggregation type.
+
+#### 1. Get Raw User Login Events
+- **Endpoint**: `GET /api/admin/events/logins`
+- **Query Parameters**:
+  - `start`: Start date (YYYY-MM-DD)
+  - `end`: End date (YYYY-MM-DD)
+- **Response**:
+```json
+[
+  { "userId": "76561197960287930", "timestamp": "2025-10-01T12:00:00Z" },
+  { "userId": "76561197960287930", "timestamp": "2025-10-02T09:00:00Z" }
+]
+```
+
+#### 2. Get Raw Recommendation Request Events
+- **Endpoint**: `GET /api/admin/events/recommendations`
+- **Query Parameters**:
+  - `start`: Start date (YYYY-MM-DD)
+  - `end`: End date (YYYY-MM-DD)
+- **Response**:
+```json
+[
+  { "userId": "76561197960287930", "timestamp": "2025-10-01T12:00:00Z" },
+  { "userId": "76561197960287930", "timestamp": "2025-10-02T09:00:00Z" }
+]
+```
+
+#### 3. Get Raw Actions Taken on Recommendations
+- **Endpoint**: `GET /api/admin/events/actions`
+- **Query Parameters**:
+  - `start`: Start date (YYYY-MM-DD)
+  - `end`: End date (YYYY-MM-DD)
+  - `actionType`: (optional) Filter by action type (`like`, `dislike`, `view`, etc.)
+- **Response**:
+```json
+[
+  { "userId": "76561197960287930", "actionType": "like", "recommendationId": "abc123", "timestamp": "2025-10-01T12:01:00Z" },
+  { "userId": "76561197960287930", "actionType": "view", "recommendationId": "abc123", "timestamp": "2025-10-01T12:02:00Z" }
+]
+```
+
+#### 4. Log User Login
+- **Endpoint**: `POST /api/admin/events/logins`
+- **Description**: Log that a user has logged in
+- **Request Body**:
+```json
+{
+  "userId": "76561197960287930",
+  "timestamp": "2025-10-01T12:00:00Z"
+}
+```
+- **Response**:
+```json
+{ "message": "Login logged" }
+```
+
+#### 5. Log Recommendation Request
+- **Endpoint**: `POST /api/admin/events/recommendations`
+- **Description**: Log that a user requested a recommendation
+- **Request Body**:
+```json
+{
+  "userId": "76561197960287930",
+  "timestamp": "2025-10-01T12:00:00Z"
+}
+```
+- **Response**:
+```json
+{ "message": "Recommendation request logged" }
+```
+
+#### 6. Log Action Taken on Recommendation
+- **Endpoint**: `POST /api/admin/events/actions`
+- **Description**: Log that a user performed an action (like, dislike, view, etc.) on a recommendation
+- **Request Body**:
+```json
+{
+  "userId": "76561197960287930",
+  "actionType": "like",
+  "recommendationId": "abc123",
+  "timestamp": "2025-10-01T12:01:00Z"
+}
+```
+- **Response**:
+```json
+{ "message": "Action logged" }
+```
