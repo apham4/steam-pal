@@ -1,25 +1,40 @@
-from fastapi import FastAPI, Depends, HTTPException, Query, status
+from fastapi import FastAPI, Depends, HTTPException, Query, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import RedirectResponse
-from jose import JWTError, jwt
-from datetime import datetime, timedelta
-import re
-import os
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
-import random
-import httpx
-from typing import Optional
+from jwt.exceptions import InvalidTokenError
+import os
+import requests
+import jwt
 
-from models import User, RecommendationRequest, GameDetail, Recommendation
+from models import UserResponse, RecommendationRequest, Recommendation, GameDetail
 from steam_api import (
-    fetch_game_details,
-    fetch_user_owned_games,
-    fetch_user_profile,
-    get_popular_game_ids,
-    transform_game_data,
-    get_game_genres
+    fetchUserOwnedGames,
+    fetchGameDetailsWithRetry,
+    transformGameData,
 )
+
+from db_helper import (
+    saveUser,
+    getUser,
+    cacheOwnedGames,
+    getOwnedGamesIds,
+    isOwnedGamesCacheRecent,
+    getUserGamingProfile,
+    cacheGameDetails,
+    getCachedGameDetails,
+    saveRecommendation,
+    getUserRecommendations,
+    getRecommendationsCount,
+    getRecommendedGameIds,
+    savePreference,
+    getPreferenceGameIds,
+    deletePreference
+)
+
+from game_recommender import generateSmartRecommendation
 
 # Load environment variables
 load_dotenv()
@@ -46,11 +61,9 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 FRONTEND_AUTH_CALLBACK_URL = os.getenv("FRONTEND_AUTH_CALLBACK_URL", "http://localhost:5173/auth-callback.html")
 
 # Backend URLs
+BACKEND_URL = "http://localhost:8000"
 BACKEND_AUTH_CALLBACK_URL = os.getenv("BACKEND_AUTH_CALLBACK_URL", "http://localhost:8000/api/auth/steam/callback")
-BACKEND_REALM = "http://localhost:8000"
 
-# API Configuration
-API_TIMEOUT_SECONDS = int(os.getenv("API_TIMEOUT_SECONDS", "10"))
 
 # CORS MIDDLEWARE
 app.add_middleware(
@@ -69,55 +82,397 @@ app.add_middleware(
 # SECURITY
 security = HTTPBearer()
 
+
 # JWT Token Functions
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def createJwtToken(steamId: str, displayName: str, avatarUrl: str = "") -> str:
     """
-    Create JWT token
-    Args:
-        data: Data to encode in the token (e.g. user info)
-        expires_delta: Optional custom expiration time
-    Returns:
-        Encoded JWT token string
+    Create JWT token for authenticated user
     """
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
-
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=JWT_ALGORITHM)
-    return encoded_jwt
-
-
-def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
-    """
-    Verify JWT token from Authorization header
+    expiration = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
     
-    Args:
-        credentials: HTTP Bearer token from request header
-    Returns:
-        Decoded token payload (user data)
-    Raises:
-        HTTPException: If token is invalid or expired
+    tokenData = {
+        "sub": steamId,
+        "displayName": displayName,
+        "avatarUrl": avatarUrl,
+        "exp": expiration
+    }
+    
+    token = jwt.encode(tokenData, SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return token
+
+async def verifyToken(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    """
+    Verify JWT token and return user data
     """
     try:
         token = credentials.credentials
         payload = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
-
-        steam_id: str = payload.get("sub")
-        if steam_id is None:
-            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+        
+        steamId = payload.get("sub")
+        if not steamId:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: missing steam ID"
+            )
+        
         return payload
+        
+    except InvalidTokenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid token: {str(e)}"
+        )
+ 
+
+# AUTHENTICATION ENDPOINTS
+@app.get("/api/auth/steam/login")
+def steamLogin():
+    """
+    Initiate Steam OpenID authentication
+    Returns Steam OpenID login URL for frontend redirection
+    """
+    params = {
+        'openid.ns': 'http://specs.openid.net/auth/2.0',
+        'openid.mode': 'checkid_setup',
+        'openid.return_to': BACKEND_AUTH_CALLBACK_URL,
+        'openid.realm': BACKEND_URL,
+        'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select',
+        'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select',
+    }
     
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Could not validate credentials")
+    loginUrl = f"{STEAM_OPENID_URL}?{'&'.join(f'{k}={v}' for k, v in params.items())}"
+    return {"login_url": loginUrl}
+
+@app.get("/api/auth/steam/callback")
+async def steamCallback(
+    request: Request,
+):
+    """
+    Handle Steam OAuth callback
+    """
+    params = dict(request.query_params)
+    openid_claimed_id = params.get("openid.claimed_id")
+    
+    print("="*70)
+    print("STEAM CALLBACK RECEIVED")
+    print(f"All params: {list(params.keys())}")
+    print(f"openid.claimed_id: {openid_claimed_id}")
+    print("="*70)
+    
+    if not openid_claimed_id:
+        raise HTTPException(status_code=400, detail="Missing openid.claimed_id parameter")
+    
+    try:
+        # Extract Steam ID from claimed_id URL
+        steamId = openid_claimed_id.split('/')[-1]
+        print(f"Extracted Steam ID: {steamId}")
+        
+        # Fetch user profile from Steam
+        profileUrl = f"http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/"
+        params = {"key": STEAM_API_KEY, "steamids": steamId}
+        
+        response = requests.get(profileUrl, params=params)
+        data = response.json()
+        
+        if not data.get("response", {}).get("players"):
+            raise HTTPException(status_code=400, detail="Failed to fetch Steam profile")
+        
+        player = data["response"]["players"][0]
+        displayName = player.get("personaname", "Unknown")
+        avatarUrl = player.get("avatarfull", "")
+        steamProfileUrl = player.get("profileurl", "")
+
+        print(f"User: {displayName}")
+
+        # Save user to database
+        saveUser(steamId, displayName, avatarUrl, steamProfileUrl)
+        
+        # Fetch and cache owned games
+        try:
+            ownedGames = fetchUserOwnedGames(steamId)
+            if ownedGames:
+                cacheOwnedGames(steamId, ownedGames)
+                print(f"Cached {len(ownedGames)} games for user {steamId}")
+        except Exception as e:
+            print(f"Failed to cache owned games: {e}")
+            # Continue login even if caching fails
+        
+        # Create JWT token
+        token = createJwtToken(steamId, displayName, avatarUrl)
+        print(f"Token created, redirecting to: {FRONTEND_AUTH_CALLBACK_URL}")
+        
+        # Redirect to frontend with token
+        return RedirectResponse(
+            url=f"{FRONTEND_AUTH_CALLBACK_URL}?token={token}"
+        )
+        
+    except Exception as e:
+        print(f"Steam callback error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
+
+@app.get("/api/auth/me")
+async def getCurrentUser(currentUser: dict = Depends(verifyToken)):
+    """
+    Get current authenticated user
+    """
+    steamId = currentUser["sub"]
+    user = getUser(steamId)
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return UserResponse(
+        steamId=user["steamId"],
+        displayName=user["displayName"],
+        avatarUrl=user["avatarUrl"],
+        profileUrl=user.get("profileUrl", ""),
+        lastLogin=datetime.fromtimestamp(user["lastLogin"]).isoformat()
+    )
+
+@app.post("/api/auth/logout")
+async def logout(currentUser: dict = Depends(verifyToken)):
+    """Logout endpoint (client should discard token)"""
+    return {"status": "success", "message": "Logged out successfully"}
+
+
+# RECOMMENDATION ENDPOINT
+@app.post("/api/recommendations")
+async def getRecommendation(
+    request: RecommendationRequest,
+    currentUser: dict = Depends(verifyToken)
+):
+    """
+    Generate AI-powered game recommendation
+    """
+    steamId = currentUser["sub"]
+    
+    try:
+        # STEP 1: Check/refresh owned games cache
+        if not isOwnedGamesCacheRecent(steamId, maxAgeHours=24):
+            print(f"Refreshing owned games cache for {steamId}")
+            ownedGames = fetchUserOwnedGames(steamId)
+            if ownedGames:
+                cacheOwnedGames(steamId, ownedGames)
+        
+        # STEP 2: Get user's gaming profile
+        gamingProfile = getUserGamingProfile(steamId)
+        print(f"Gaming Profile: {gamingProfile['gameCount']} games, {gamingProfile['totalPlaytime']}h total")
+
+        # STEP 3: Get exclusion lists
+        ownedGameIds = set(getOwnedGamesIds(steamId))
+        recommendedGameIds = set(getRecommendedGameIds(steamId))
+        dislikedGameIds = set(getPreferenceGameIds(steamId, "disliked"))
+        
+        # Combine all games to exclude
+        excludeGameIds = ownedGameIds | recommendedGameIds | dislikedGameIds
+        
+        print(f"Excluding {len(excludeGameIds)} games")
+
+        # STEP 4: Generate recommendation
+        recommendation = generateSmartRecommendation(
+            steamId=steamId,
+            gamingProfile=gamingProfile,
+            requestedGenres=request.genres,
+            excludeGameIds=excludeGameIds,
+        )
+        
+        if not recommendation:
+            raise HTTPException(
+                status_code=404,
+                detail="No suitable games found. Try different genres or check back later."
+            )
+        
+        # STEP 5: Save recommendation to history
+        saveRecommendation(
+            steamId=steamId,
+            game=recommendation["game"],
+            reasoning=recommendation["reasoning"],
+            matchScore=recommendation["matchScore"],
+            requestedGenres=request.genres
+        )
+        
+        # STEP 6: Return to frontend
+        return Recommendation(
+            game=GameDetail(**recommendation["game"]),
+            reasoning=recommendation["reasoning"],
+            matchScore=recommendation["matchScore"]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Recommendation error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate recommendation: {str(e)}"
+        )
+
+
+# RECOMMENDATION HISTORY ENDPOINT
+@app.get("/api/recommendations/history")
+async def getRecommendationHistory(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    currentUser: dict = Depends(verifyToken)
+):
+    """
+    Get user's recommendation history
+    """
+    steamId = currentUser["sub"]
+    
+    offset = (page - 1) * limit
+    recommendations = getUserRecommendations(steamId, limit, offset)
+    totalCount = getRecommendationsCount(steamId)
+    totalPages = (totalCount + limit - 1) // limit
+    
+    return {
+        "recommendations": recommendations,
+        "page": page,
+        "limit": limit,
+        "total": totalCount,
+        "pages": totalPages
+    }
+
+
+# PREFERENCE MANAGEMENT ENDPOINT
+@app.post("/api/preferences/{gameId}/like")
+async def likeGame(gameId: str, currentUser: dict = Depends(verifyToken)):
+    """
+    Mark a game as liked
+    """
+    steamId = currentUser["sub"]
+    
+    try:
+        savePreference(steamId, gameId, "liked")
+        return {"status": "success", "gameId": gameId, "preference": "liked", "message": f"Game {gameId} liked"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/preferences/{gameId}/dislike")
+async def dislikeGame(gameId: str, currentUser: dict = Depends(verifyToken)):
+    """
+    Mark a game as disliked
+    """
+    steamId = currentUser["sub"]
+    
+    try:
+        savePreference(steamId, gameId, "disliked")
+        return {"status": "success", "gameId": gameId, "preference": "disliked", "message": f"Game {gameId} disliked"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/preferences/{gameId}")
+async def removePreference(gameId: str, currentUser: dict = Depends(verifyToken)):
+    """
+    Remove a preference (undo like/dislike)
+    """
+    steamId = currentUser["sub"]
+    
+    try:
+        deletePreference(steamId, gameId)
+        return {"status": "success", "gameId": gameId, "message": f"Preference removed for game {gameId}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/preferences/liked")
+async def getLikedGames(currentUser: dict = Depends(verifyToken)):
+    """
+    Get all liked games with full details
+    """
+    steamId = currentUser["sub"]
+    
+    try:
+        likedGameIds = getPreferenceGameIds(steamId, "liked")
+        
+        # Fetch full game details for each liked game
+        likedGames = []
+        for gameId in likedGameIds:
+            gameData = getCachedGameDetails(gameId)
+            
+            if not gameData:
+                # Fetch from Steam API
+                gameData = fetchGameDetailsWithRetry(gameId)
+                if gameData:
+                    cacheGameDetails(gameId, gameData)
+            
+            if gameData:
+                transformedGame = transformGameData(gameData)
+                likedGames.append(transformedGame)
+        
+        return {
+            "games": likedGames,
+            "count": len(likedGames)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/preferences/disliked")
+async def getDislikedGames(currentUser: dict = Depends(verifyToken)):
+    """
+    Get all disliked games with full details
+    """
+    steamId = currentUser["sub"]
+    
+    try:
+        dislikedGameIds = getPreferenceGameIds(steamId, "disliked")
+        
+        # Fetch full game details for each disliked game
+        dislikedGames = []
+        for gameId in dislikedGameIds:
+            gameData = getCachedGameDetails(gameId)
+            
+            if not gameData:
+                # Fetch from Steam API
+                gameData = fetchGameDetailsWithRetry(gameId)
+                if gameData:
+                    cacheGameDetails(gameId, gameData)
+            
+            if gameData:
+                transformedGame = transformGameData(gameData)
+                dislikedGames.append(transformedGame)
+        
+        return {
+            "games": dislikedGames,
+            "count": len(dislikedGames)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/preferences/all")
+async def getAllPreferences(currentUser: dict = Depends(verifyToken)):
+    """
+    Get all user preferences (liked and disliked)
+    """
+    steamId = currentUser["sub"]
+    
+    try:
+        likedGameIds = getPreferenceGameIds(steamId, "liked")
+        dislikedGameIds = getPreferenceGameIds(steamId, "disliked")
+        
+        return {
+            "preferences": {
+                "liked": [{"gameId": gid} for gid in likedGameIds],
+                "disliked": [{"gameId": gid} for gid in dislikedGameIds]
+            },
+            "totals": {
+                "liked": len(likedGameIds),
+                "disliked": len(dislikedGameIds)
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ROOT ENDPOINTS
 @app.get("/")
-def read_root():
+def readRoot():
     """Root endpoint - API status"""
     return {
         "message": "Steam Pal API is running",
@@ -128,332 +483,14 @@ def read_root():
     }
 
 @app.get("/health")
-def health_check():
+def healthCheck():
     """Health check endpoint"""
     return {
-        "status": "healthy", 
-        "timestamp": datetime.utcnow().isoformat()
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
-# AUTHENTICATION ENDPOINTS
-@app.get("/api/auth/steam/login")
-def steam_login():
-    """
-    Initiate Steam OpenID authentication
-    Returns Steam OpenID login URL for frontend redirection
-    """
-    params = {
-        'openid.ns': 'http://specs.openid.net/auth/2.0',
-        'openid.mode': 'checkid_setup',
-        'openid.return_to': BACKEND_AUTH_CALLBACK_URL,
-        'openid.realm': BACKEND_REALM,
-        'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select',
-        'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select',
-    }
-    
-    query_string = "&".join([f"{k}={v}" for k, v in params.items()])
-    login_url = f"{STEAM_OPENID_URL}?{query_string}"
 
-    print(f"[steam_login] Generated login URL")
-    return {"login_url": login_url}
-
-@app.get("/api/auth/steam/callback")
-async def steam_auth_callback(
-    openid_ns: str = Query(..., alias="openid.ns"),
-    openid_mode: str = Query(..., alias="openid.mode"),
-    openid_op_endpoint: str = Query(..., alias="openid.op_endpoint"),
-    openid_claimed_id: str = Query(..., alias="openid.claimed_id"),
-    openid_identity: str = Query(..., alias="openid.identity"),
-    openid_return_to: str = Query(..., alias="openid.return_to"),
-    openid_response_nonce: str = Query(..., alias="openid.response_nonce"),
-    openid_assoc_handle: str = Query(..., alias="openid.assoc_handle"),
-    openid_signed: str = Query(..., alias="openid.signed"),
-    openid_sig: str = Query(..., alias="openid.sig"),
-):
-    """
-    Handle Steam OpenID callback and redirect to frontend with JWT token
-    """
-    print("[steam_auth_callback] Received Steam callback")
-    # Verify the OpenID response
-    if openid_mode != "id_res":
-        raise HTTPException(status_code=400, detail="Invalid OpenID response")
-    
-    # Verify response with Steam
-    params = {
-        "openid.ns": openid_ns,
-        "openid.mode": "check_authentication",
-        "openid.op_endpoint": openid_op_endpoint,
-        "openid.claimed_id": openid_claimed_id,
-        "openid.identity": openid_identity,
-        "openid.return_to": openid_return_to,
-        "openid.response_nonce": openid_response_nonce,
-        "openid.assoc_handle": openid_assoc_handle,
-        "openid.signed": openid_signed,
-        "openid.sig": openid_sig
-    }
-
-    async with httpx.AsyncClient(timeout=API_TIMEOUT_SECONDS) as client:
-        response = await client.post(STEAM_OPENID_URL, data=params)
-
-    if "is_valid:true" not in response.text:
-        print("[steam_auth_callback] Steam verification failed")
-        raise HTTPException(status_code=400, detail="Invalid Steam OpenID verification")
-    
-    # Extract Steam ID from claimed_id
-    match = re.search(r"https?://steamcommunity\.com/openid/id/(\d+)", openid_claimed_id)
-    if not match:
-        raise HTTPException(status_code=400, detail="Could not extract Steam ID")
-    steam_id = match.group(1)
-    print(f"[steam_auth_callback] Authenticated Steam ID: {steam_id}")
-
-    # Fetch user profile from Steam API
-    profile = fetch_user_profile(steam_id)
-
-    if not profile:
-        # Fallback if Steam API fails
-        print(f"[steam_auth_callback] Could not fetch profile, using fallback")
-        profile = {
-            "personaname": f"User_{steam_id[-4:]}",
-            "avatarfull": "",
-            "profileurl": f"https://steamcommunity.com/profiles/{steam_id}"
-        }
-
-    # Create JWT token
-    access_token = create_access_token(
-        data={
-            "sub": steam_id,
-            "display_name": profile.get("personaname", f"User_{steam_id[-4:]}"),
-            "avatar_url": profile.get("avatarfull", ""),
-            "profile_url": profile.get("profileurl", f"https://steamcommunity.com/profiles/{steam_id}"),
-        }
-    )
-
-    # Redirect to frontend with token as query parameter
-    redirect_url = f"{FRONTEND_AUTH_CALLBACK_URL}?token={access_token}"
-    print(f"[steam_auth_callback] Redirecting to: {redirect_url}")
-    return RedirectResponse(url=redirect_url)
-
-@app.get("/api/auth/me", response_model=User)
-def get_current_user(current_user: dict = Depends(verify_token)):
-    """
-    Get current authenticated user information
-    Requires valid JWT token in Authorization header: "Bearer <token>"
-    Args:
-        current_user: Decoded JWT token payload
-    Returns:
-        User model with steam_id, display_name, avatar_url, profile_url
-    """
-    return User(
-        steam_id=current_user["sub"],
-        display_name=current_user.get("display_name", "Unknown"),
-        avatar_url=current_user.get("avatar_url", ""),
-        profile_url=current_user.get("profile_url", ""),
-        last_login=datetime.utcnow()
-    )
-
-# LOGOUT ENDPOINT
-@app.post("/api/auth/logout")
-def logout():
-    """Logout endpoint (client should discard token)"""
-    return {"message": "Logged out successfully"}
-
-# GAME RECOMMENDATION ENDPOINT
-@app.post("/api/recommendations", response_model=Recommendation)
-async def get_recommendation(
-    request: RecommendationRequest,
-    current_user: dict = Depends(verify_token)
-):
-    """
-    Get AI-powered game recommendation based on user's Steam library
-    Requires authentication via JWT token in Authorization header.
-    Request format:
-    {
-        "steamId": "76561197960287930",
-        "genre": "RPG",
-        "useWishlist": false
-    }
-    Response format:
-    {
-        "game": {
-            "id": "292030",
-            "title": "The Witcher 3: Wild Hunt",
-            "thumbnail": "https://...",
-            "releaseDate": "May 18, 2015",
-            "publisher": "CD PROJEKT RED",
-            "developer": "CD PROJEKT RED",
-            "price": "$39.99",
-            "salePrice": "$9.99",
-            "description": "..."
-        },
-        "reasoning": "Based on your Steam library of 150 games..."
-    }
-    """
-    print(f"\n{'='*70}")
-    print(f"[get_recommendation] New request from: {current_user.get('display_name', 'Unknown')}")
-    print(f"[get_recommendation] Request: steamId={request.steamId}, genre={request.genre}")
-    print(f"{'='*70}\n")
-    
-    try:
-        # Step 1: Fetch user's owned games from Steam
-        print("Fetching user's game library...")
-        user_games = fetch_user_owned_games(request.steamId)
-        
-        if not user_games:
-            print("Could not fetch user library (may be private or API error)")
-        
-        user_game_ids = {str(game["appid"]) for game in user_games}
-        print(f"User owns {len(user_game_ids)} games")
-        
-        # Step 2: Get popular game candidates
-        print("Getting popular game candidates...")
-        candidate_game_ids = get_popular_game_ids(limit=50)
-        print(f"Found {len(candidate_game_ids)} candidate games")
-        
-        # Step 3: Filter out games user already owns
-        print("[Step 3] Filtering out owned games...")
-        new_games = [gid for gid in candidate_game_ids if gid not in user_game_ids]
-        
-        if not new_games:
-            print(" User owns all candidate games! Using all candidates.")
-            new_games = candidate_game_ids
-
-        print(f"[Step 3] {len(new_games)} games available for recommendation")
-
-        # Step 4: Filter by genre if specified
-        if request.genre:
-            print(f"[Step 4] Filtering by genre: {request.genre}")
-            genre_filtered_games = []
-            
-            # Check first 20 games to save API calls
-            for game_id in new_games[:20]:
-                game_data = fetch_game_details(game_id)
-                if game_data:
-                    genres = get_game_genres(game_data)
-                    # Check if requested genre matches any game genre
-                    if any(request.genre.lower() in genre.lower() for genre in genres):
-                        genre_filtered_games.append(game_id)
-                        print(f"[Step 4] {game_data.get('name')} matches {request.genre}")
-            
-            if genre_filtered_games:
-                new_games = genre_filtered_games
-                print(f"[Step 4] Found {len(new_games)} {request.genre} games")
-            else:
-                print(f"[Step 4] No {request.genre} games found, using all candidates instead")
-
-        # Step 5: Select a random game
-        print("[Step 5] Selecting recommendation...")
-        recommended_game_id = random.choice(new_games)
-        print(f"[Step 5] Selected game ID: {recommended_game_id}")
-
-        # Step 6: Fetch full game details from Steam
-        print("[Step 6] Fetching game details...")
-        raw_game_data = fetch_game_details(recommended_game_id)
-
-        if not raw_game_data:
-            raise HTTPException(
-                status_code=500,
-                detail="Could not fetch game details from Steam API"
-            )
-        
-        print(f"[Step 6] Fetched: {raw_game_data.get('name', 'Unknown')}")
-        
-        # Step 7: Transform to frontend-compatible format
-        print("[Step 7] Transforming data...")
-        game_data = transform_game_data(raw_game_data)
-        
-        # Step 8: Generate reasoning
-        print("[Step 8] Generating recommendation reasoning...")
-        reasoning = generate_reasoning(
-            game_data=game_data,
-            raw_game_data=raw_game_data,
-            user_game_count=len(user_games),
-            preferred_genre=request.genre,
-            use_wishlist=request.useWishlist
-        )
-        
-        print(f"Success! Recommended: {game_data['title']}, {game_data['price']}")
-        print(f"{'='*70}\n")
-        
-        # Step 9: Return recommendation
-        return Recommendation(
-            game=GameDetail(**game_data),
-            reasoning=reasoning
-        )
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        print(f"[get_recommendation] Unexpected error: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error while generating recommendation: {str(e)}"
-        )
-
-
-def generate_reasoning(
-    game_data: dict,
-    raw_game_data: dict,
-    user_game_count: int,
-    preferred_genre: str = "",
-    use_wishlist: bool = False
-) -> str:
-    """
-    Generate personalized reasoning for recommendation
-    Args:
-        game_data: Transformed game data (frontend format)
-        raw_game_data: Raw Steam API response
-        user_game_count: Number of games user owns
-        preferred_genre: User's preferred genre filter
-        use_wishlist: Whether wishlist was considered
-    Returns:
-        Reasoning text explaining the recommendation
-    """
-    try:
-        reasoning_parts = []
-        
-        # User context
-        if user_game_count > 0:
-            reasoning_parts.append(f"Based on your Steam library of {user_game_count} games")
-        else:
-            reasoning_parts.append("Based on popular games on Steam")
-        
-        # Genre preference
-        if preferred_genre:
-            reasoning_parts.append(f"and your interest in {preferred_genre} games")
-        
-        # Main recommendation
-        reasoning = ", ".join(reasoning_parts) + f", we recommend **{game_data['title']}**.\n\n"
-        
-        # Game description
-        if game_data.get('description'):
-            description = game_data['description']
-            # Truncate if too long
-            if len(description) > 250:
-                description = description[:250].rsplit(' ', 1)[0] + "..."
-            reasoning += description + "\n\n"
-        
-        # Game details
-        genres = get_game_genres(raw_game_data)
-        if genres:
-            reasoning += f"**Genres:** {', '.join(genres[:3])}\n"
-        
-        if game_data.get('releaseDate'):
-            reasoning += f"**Released:** {game_data['releaseDate']}\n"
-        
-        if game_data.get('developer'):
-            reasoning += f"**Developer:** {game_data['developer']}\n"
-        
-        # Pricing
-        if game_data.get('salePrice'):
-            reasoning += f"\n**On Sale!** ~~{game_data['price']}~~ → {game_data['salePrice']}"
-        elif game_data.get('price'):
-            reasoning += f"\n**Price:** {game_data['price']}"
-        
-        return reasoning
-        
-    except Exception as e:
-        print(f"[generate_reasoning] Error generating reasoning: {e}")
-        return f"We recommend **{game_data.get('title', 'this game')}** based on its popularity and high ratings on Steam."
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
