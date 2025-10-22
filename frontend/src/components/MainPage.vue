@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
-import { useUserStore } from '../stores/user'
-import { getRecommendation, getRecommendationHistory, logRecommendationRequest, logRecommendationActionTaken } from '../services/api'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useUserStore } from '@/stores/user'
+import { usePreferenceStore } from '@/stores/preference'
+import { getRecommendation, getRecommendationHistory, likeGame, dislikeGame, removePreference, getLikedGames, getDislikedGames, logRecommendationRequest, logRecommendationActionTaken } from '../services/api'
 
 //#region General
 const tab = ref(0)
@@ -12,12 +13,16 @@ const userMenu = ref(false)
 const errorMsg = ref('')
 const snackbar = ref(false)
 
+onMounted(() => {
+  fetchPreferences()
+})
+
 // Watch for tab change
 watch(tab, async (newVal) => {
   if (newVal === 1) {
     // Past Recommendations tab
     fetchRecommendationHistory(pastRecommendationsPage.value, pastRecommendationsPageSize.value)
-  } 
+  }
 })
 //#endregion
 
@@ -125,28 +130,57 @@ async function fetchRecommendationHistory(pageNum, pageSize) {
 
 
 //#region Manage Preferences
+const preferenceStore = usePreferenceStore()
+
+async function fetchPreferences() {
+  try {
+    const [liked, disliked] = await Promise.all([
+      getLikedGames(),
+      getDislikedGames()
+    ])
+    preferenceStore.setLiked(liked)
+    preferenceStore.setDisliked(disliked)
+  } catch (err) {
+    console.error('Failed to fetch preferences:', err)
+  }
+}
+
 async function likeRecommendation(game) {
-  await logRecommendationActionTaken('like', game.id);
-  //
+  console.log('Liking game: %s with ID %s', game, game.gameId)
+  if (preferenceStore.isDisliked(game)) {
+    preferenceStore.removeStoredPreference(game)
+    // await removePreference(game.gameId)
+  }
+  preferenceStore.addLiked(game)
+  await Promise.all([
+      likeGame(game.gameId),
+      logRecommendationActionTaken('like', game.gameId)
+    ])
 }
+
 async function dislikeRecommendation(game) {
-  await logRecommendationActionTaken('dislike', game.id);
-  //
+  console.log('Disliking game: %s with ID %s', game, game.gameId)
+  if (preferenceStore.isLiked(game)) {
+    preferenceStore.removeStoredPreference(game)
+    // await removePreference(game.gameId)
+  }
+  preferenceStore.addDisliked(game)
+  await Promise.all([
+      dislikeGame(game.gameId),
+      logRecommendationActionTaken('dislike', game.gameId)
+    ])
 }
+
 async function handleViewOnSteam(game) {
-  await logRecommendationActionTaken('view_store', game.id);
+  await logRecommendationActionTaken('view_store', game.gameId)
 }
-function removeLiked(gameId) {
-  //
-}
-function removeDisliked(gameId) {
-  //
-}
-function moveLikedToDisliked(gameId) {
-  //
-}
-function moveDislikedToLiked(gameId) {
-  //
+
+async function removeRecommendationPreference(game) {
+  preferenceStore.removeStoredPreference(game)
+  await Promise.all([
+      removePreference(game.gameId),
+      logRecommendationActionTaken('remove_preference', game.gameId)
+    ])
 }
 //#endregion
 </script>
@@ -209,7 +243,7 @@ function moveDislikedToLiked(gameId) {
           <v-tabs v-model="tab" background-color="primary" dark class="justify-center">
             <v-tab>Get Recommendation</v-tab>
             <v-tab>Past Recommendations</v-tab>
-            <!-- [V2 TODO] Preferences <v-tab>Manage Preferences</v-tab> -->
+            <v-tab>Manage Preferences</v-tab>
           </v-tabs>
         </div>
         <v-window v-model="tab">
@@ -295,13 +329,13 @@ function moveDislikedToLiked(gameId) {
                 <v-list v-else>
                   <v-list-item
                     v-for="game in pastRecommendations"
-                    :key="game.id"
+                    :key="game.gameId"
                     @click="showRecommendationDetails(game)"
                   >
                     <div style="display: flex; align-items: center; width: 100%;">
                       <span style="flex: 1;">{{ game.title }}</span>
                         <!-- Cut 
-                        <v-btn icon @click.stop="removePastRecommendation(game.id)">
+                        <v-btn icon @click.stop="removePastRecommendation(game.gameId)">
                             <v-icon>mdi-delete</v-icon>
                         </v-btn>
                         -->
@@ -330,19 +364,19 @@ function moveDislikedToLiked(gameId) {
               <v-col>
                 <div class="text-center font-weight-bold mb-2">Liked</div>
                 <v-card class="pa-2" style="height:250px; overflow-y:auto;">
-                  <div v-if="userStore.liked.length === 0" class="d-flex align-center justify-center" style="height:100%;">
+                  <div v-if="preferenceStore.liked.length === 0" class="d-flex align-center justify-center" style="height:100%;">
                     <span class="text-center">No liked recommendations.</span>
                   </div>
                   <v-list v-else>
                     <v-list-item
-                      v-for="game in userStore.liked"
-                      :key="game.id"
+                      v-for="game in preferenceStore.liked"
+                      :key="game.gameId"
                       @click="showRecommendationDetails(game)"
                     >
                         <div style="display: flex; align-items: center; width: 100%;">
                             <span style="flex: 1;">{{ game.title }}</span>
-                            <v-btn icon @click.stop="removeLiked(game.id)"><v-icon>mdi-delete</v-icon></v-btn>
-                            <v-btn icon @click.stop="moveLikedToDisliked(game.id)"><v-icon>mdi-arrow-right</v-icon></v-btn>
+                            <v-btn icon @click.stop="removeRecommendationPreference(game)"><v-icon>mdi-delete</v-icon></v-btn>
+                            <v-btn icon @click.stop="dislikeRecommendation(game)"><v-icon>mdi-arrow-right</v-icon></v-btn>
                         </div>
                     </v-list-item>
                   </v-list>
@@ -351,19 +385,19 @@ function moveDislikedToLiked(gameId) {
               <v-col>
                 <div class="text-center font-weight-bold mb-2">Disliked</div>
                 <v-card class="pa-2" style="height:250px; overflow-y:auto;">
-                  <div v-if="userStore.disliked.length === 0" class="d-flex align-center justify-center" style="height:100%;">
+                  <div v-if="preferenceStore.disliked.length === 0" class="d-flex align-center justify-center" style="height:100%;">
                     <span class="text-center">No disliked recommendations.</span>
                   </div>
                   <v-list v-else>
                     <v-list-item
-                      v-for="game in userStore.disliked"
-                      :key="game.id"
+                      v-for="game in preferenceStore.disliked"
+                      :key="game.gameId"
                       @click="showRecommendationDetails(game)"
                     >
                         <div style="display: flex; align-items: center; width: 100%;">
                             <span style="flex: 1;">{{ game.title }}</span>
-                            <v-btn icon @click.stop="removeDisliked(game.id)"><v-icon>mdi-delete</v-icon></v-btn>
-                            <v-btn icon @click.stop="moveDislikedToLiked(game.id)"><v-icon>mdi-arrow-left</v-icon></v-btn>
+                            <v-btn icon @click.stop="removeRecommendationPreference(game)"><v-icon>mdi-delete</v-icon></v-btn>
+                            <v-btn icon @click.stop="likeRecommendation(game)"><v-icon>mdi-arrow-left</v-icon></v-btn>
                         </div>
                     </v-list-item>
                   </v-list>
@@ -433,15 +467,23 @@ function moveDislikedToLiked(gameId) {
               <div style="max-height: 80px; overflow-y: auto;">{{ reasoning }}</div>
             </v-card>
             <div class="d-flex justify-center mt-4" style="gap:20px;">
-                <!-- [V2 TODO] Preferences 
-                <v-btn color="success" class="mt-2" @click="likeRecommendation(recommendation)">
-                  <v-icon class="mr-2">mdi-thumb-up</v-icon> Like
+                <v-btn 
+                  color="success" 
+                  class="mt-2" 
+                  @click="likeRecommendation(recommendation)"
+                  :disabled="preferenceStore.isLiked(recommendation)"
+                >
+                  <v-icon class="mr-2">mdi-thumb-up</v-icon> {{ preferenceStore.isLiked(recommendation) ? 'Liked' : 'Like' }}
                 </v-btn>
-                <v-btn color="error" class="mt-2" @click="dislikeRecommendation(recommendation)">
-                  <v-icon class="mr-2">mdi-thumb-down</v-icon> Dislike
+                <v-btn 
+                  color="error" 
+                  class="mt-2" 
+                  @click="dislikeRecommendation(recommendation)"
+                  :disabled="preferenceStore.isDisliked(recommendation)"
+                >
+                  <v-icon class="mr-2">mdi-thumb-down</v-icon> {{ preferenceStore.isDisliked(recommendation) ? 'Disliked' : 'Dislike' }}
                 </v-btn>
-                -->
-                <v-btn color="info" class="mt-2" @click="handleViewOnSteam(recommendation)" :href="steamStoreUrl(recommendation.id)" target="_blank">
+                <v-btn color="info" class="mt-2" @click="handleViewOnSteam(recommendation)" :href="steamStoreUrl(recommendation.gameId)" target="_blank">
                   <v-icon class="mr-2">mdi-cart</v-icon> View on Steam
                 </v-btn>
                 <!-- [ADDITIONAL] Wishlist-related features

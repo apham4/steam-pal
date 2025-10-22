@@ -4,10 +4,12 @@ import UserPage from './components/UserPage.vue'
 import MainPage from './components/MainPage.vue'
 import { onMounted, computed } from 'vue'
 import { useUserStore } from './stores/user'
+import { usePreferenceStore } from './stores/preference'
 import { logUserLogin, getCurrentUser, logOut } from './services/api'
 
 const currentView = ref(markRaw(UserPage))
 const userStore = useUserStore()
+const preferenceStore = usePreferenceStore()
 const userDisplayName = computed(() => userStore.profile?.display_name)
 
 onMounted(() => {
@@ -51,8 +53,10 @@ function updateTitle() {
 
 function handleChangeUser() {
   userStore.logout()
+  preferenceStore.clearPreferences()
   logOut() // Call the logout API
   currentView.value = markRaw(UserPage)
+  updateTitle()
 }
 </script>
 

@@ -162,6 +162,17 @@ async function mockLikeGame(gameId) {
   };
 }
 
+// Mock dislike a game
+async function mockDislikeGame(gameId) {
+  await delay(100);
+  return {
+    status: "success",
+    gameId: gameId,
+    preference: "disliked",
+    message: `Game ${gameId} disliked`
+  };
+}
+
 // Mock remove a preference
 async function mockRemovePreference(gameId) {
   await delay(100);
@@ -184,17 +195,6 @@ async function mockGetDislikedGames() {
   return [mockGames[0], mockGames[0], mockGames[0]];
 }
 
-// Mock dislike a game
-async function mockDislikeGame(gameId) {
-  await delay(100);
-  return {
-    status: "success",
-    gameId: gameId,
-    preference: "disliked",
-    message: `Game ${gameId} disliked`
-  };
-}
-
 // Mock get all preferences
 async function mockGetAllPreferences() {
   await delay(100);
@@ -213,66 +213,122 @@ async function mockGetAllPreferences() {
 
 // #region Real API Implementations
 async function realGetSteamLoginUrl() {
-  const res = await api.get('/api/auth/steam/login')
-  return res.data.login_url
+  try {
+    const res = await api.get('/api/auth/steam/login')
+    return res.data.login_url
+  } catch (error) {
+    console.error('Error fetching Steam login URL:', error)
+    throw error
+  }
+  
 }
 
 async function realGetCurrentUser() {
-  const res = await api.get('/api/auth/me')
-  return res.data
+  try {
+    const res = await api.get('/api/auth/me')
+    return res.data
+  } catch (error) {
+    console.error('Error fetching current user:', error)
+    throw error
+  }
 }
 
 async function realLogOut() {
-  const res = await api.post('/api/auth/logout')
-  return res.data
+  try {
+    const res = await api.post('/api/auth/logout')
+    return res.data
+  } catch (error) {
+    console.error('Error logging out:', error)
+    throw error
+  }
 }
 
 async function realGetRecommendation(params) {
-  const res = await api.post('/api/recommendations', params);
-  return res.data;
+  try {
+    const res = await api.post('/api/recommendations', params);
+    return res.data;
+  } catch (error) {
+    console.error('Error fetching recommendation:', error)
+    throw error
+  }
 }
 
 async function realGetRecommendationHistory(pageNum, pageSize) {
-  const res = await api.get('/api/recommendations/history', {
-    params: { page: pageNum, limit: pageSize },
-  });
-  return {
-    recommendations: res.data.recommendations,
-    currentPage: res.data.page,
-    pageSize: res.data.limit,
-    totalRecommendations: res.data.total,
-    pages: res.data.pages,
-  };
+  try {
+    const res = await api.get('/api/recommendations/history', {
+      params: { page: pageNum, limit: pageSize },
+    });
+    return {
+      recommendations: res.data.recommendations,
+      currentPage: res.data.page,
+      pageSize: res.data.limit,
+      totalRecommendations: res.data.total,
+      pages: res.data.pages,
+    }
+   } catch (error) {
+    console.error('Error fetching recommendation history:', error)
+    throw error
+  }
 }
 
 async function realLikeGame(gameId) {
-  const res = await api.post(`/api/preferences/${gameId}/like`);
-  return res.data;
+  try {
+    const res = await api.post(`/api/preferences/${gameId}/like`);
+    return res.data;
+  } catch (error) {
+    console.error('Error liking game:', error)
+    throw error
+  }
 }
 
 async function realDislikeGame(gameId) {
-  const res = await api.post(`/api/preferences/${gameId}/dislike`);
-  return res.data;
+  try {
+    const res = await api.post(`/api/preferences/${gameId}/dislike`);
+    return res.data;
+  } catch (error) {
+    console.error('Error disliking game:', error)
+    throw error
+  }
 }
 
 async function realRemovePreference(gameId) {
-  const res = await api.delete(`/api/preferences/${gameId}`);
-  return res.data;
+  try {
+    const res = await api.delete(`/api/preferences/${gameId}`);
+    return res.data;
+  } catch (error) {
+    console.error('Error removing preference:', error)
+    throw error
+  }
 }
 
 async function realGetLikedGames() {
-  const res = await api.get('/api/preferences/liked');
-  return res.data.games;
+  try {
+    const res = await api.get('/api/preferences/liked');
+    return res.data.games;
+  } catch (error) {
+    console.error('Error fetching liked games:', error)
+    throw error
+  }
 }
 
 async function realGetDislikedGames() {
-  const res = await api.get('/api/preferences/disliked');
-  return res.data.games;
+  try {
+    const res = await api.get('/api/preferences/disliked');
+    return res.data.games;
+  } catch (error) {
+    console.error('Error fetching disliked games:', error)
+    throw error
+  }
 }
 
 async function realGetAllPreferences() {
-  const res = await api.get('/api/preferences/all');
-  return res.data;
+  try {
+    const res = await api.get('/api/preferences/all');
+    return res.data;
+  } catch (error) {
+    console.error('Error fetching all preferences:', error)
+    throw error
+  }
   // res.data.preferences has liked and disliked arrays.
   // res.data.totals has liked and disliked counts.
 }
