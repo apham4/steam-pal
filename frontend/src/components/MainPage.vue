@@ -243,7 +243,7 @@ async function removeRecommendationPreference(game) {
           <v-tabs v-model="tab" background-color="primary" dark class="justify-center">
             <v-tab>Get Recommendation</v-tab>
             <v-tab>Past Recommendations</v-tab>
-            <v-tab>Manage Preferences</v-tab>
+            <!-- [V2 TODO] Preferences <v-tab>Manage Preferences</v-tab> -->
           </v-tabs>
         </div>
         <v-window v-model="tab">
@@ -467,7 +467,7 @@ async function removeRecommendationPreference(game) {
               <div style="max-height: 80px; overflow-y: auto;">{{ reasoning }}</div>
             </v-card>
             <div class="d-flex justify-center mt-4" style="gap:20px;">
-                <v-btn 
+                <!-- [V2 TODO] Preferences <v-btn 
                   color="success" 
                   class="mt-2" 
                   @click="likeRecommendation(recommendation)"
@@ -482,7 +482,7 @@ async function removeRecommendationPreference(game) {
                   :disabled="preferenceStore.isDisliked(recommendation)"
                 >
                   <v-icon class="mr-2">mdi-thumb-down</v-icon> {{ preferenceStore.isDisliked(recommendation) ? 'Disliked' : 'Dislike' }}
-                </v-btn>
+                </v-btn> -->
                 <v-btn color="info" class="mt-2" @click="handleViewOnSteam(recommendation)" :href="steamStoreUrl(recommendation.gameId)" target="_blank">
                   <v-icon class="mr-2">mdi-cart</v-icon> View on Steam
                 </v-btn>
