@@ -26,6 +26,7 @@ watch(tab, async (newVal) => {
 const showRecommendation = ref(false)
 const recommendation = ref(null)
 const reasoning = ref('')
+const matchScore = ref(-1)
 
 function steamStoreUrl(gameId) {
   return `https://store.steampowered.com/app/${gameId}`
@@ -34,6 +35,7 @@ function steamStoreUrl(gameId) {
 function showRecommendationDetails(game) {
   recommendation.value = game
   reasoning.value = ''
+  matchScore.value = -1
   showRecommendation.value = true
 }
 //#endregion
@@ -78,6 +80,7 @@ async function fetchRecommendation() {
     })
     recommendation.value = result.game
     reasoning.value = result.reasoning
+    matchScore.value = result.match_score
     showRecommendation.value = true
   } catch (err) {
     errorMsg.value = err?.message || 'Failed to get recommendation.'
@@ -209,8 +212,8 @@ function moveDislikedToLiked(gameId) {
             <!-- [V2 TODO] Preferences <v-tab>Manage Preferences</v-tab> -->
           </v-tabs>
         </div>
-        <v-tabs-items v-model="tab">
-          <v-tab-item>
+        <v-window v-model="tab">
+          <v-window-item>
             <!-- Get Recommendation tab content -->
             <div v-if="tab === 0" class="d-flex flex-column align-center mt-4" style="gap: 8px;">
             <!-- [V2 TODO] Filters
@@ -275,8 +278,8 @@ function moveDislikedToLiked(gameId) {
                 </v-btn>
               </div>
             </div>
-          </v-tab-item>
-          <v-tab-item>
+          </v-window-item>
+          <v-window-item>
             <!-- Past Recommendations tab content -->
             <div v-if="tab === 1" class="d-flex flex-column align-center mt-4">
               <v-card class="pa-2" style="width:100%; max-width:600px; height:250px; overflow-y:auto;">
@@ -320,8 +323,8 @@ function moveDislikedToLiked(gameId) {
                 />
               </div>
             </div>
-          </v-tab-item>
-          <v-tab-item>
+          </v-window-item>
+          <v-window-item>
             <!-- Manage Preferences tab content -->
             <div v-if="tab === 2" class="d-flex flex-row align-center mt-4">
               <v-col>
@@ -367,8 +370,8 @@ function moveDislikedToLiked(gameId) {
                 </v-card>
               </v-col>
             </div>
-          </v-tab-item>
-        </v-tabs-items>
+          </v-window-item>
+        </v-window>
       </v-col>
     </v-row>
 
@@ -381,8 +384,26 @@ function moveDislikedToLiked(gameId) {
           </v-card-title>
           <v-card-text>
             <div v-if="recommendation" class="d-flex flex-row align-center mb-2" style="min-height:190px;">
-              <div style="display:flex; align-items:center;">
+              <div style="position:relative; display:inline-block;">
                 <v-img :src="recommendation.thumbnail" height="190" width="400" contain style="margin-right:16px;" />
+                <div
+                  v-if="matchScore >= 0"
+                  style="
+                    position: absolute;
+                    top: 8px;
+                    right: 18px;
+                    background: #e53935;
+                    color: #fff;
+                    padding: 4px 12px;
+                    border-radius: 16px;
+                    font-weight: bold;
+                    font-size: 1rem;
+                    z-index: 2;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+                  "
+                >
+                  Match Score: {{ matchScore }}%
+                </div>
               </div>
               <v-card class="pa-2" color="background" dark style="flex:1; height:190px; display:flex; flex-direction:column; align-items:flex-start; justify-content:flex-start; overflow-y:auto;">
                 <div class="recommendation-title">{{ recommendation.title }}</div>

@@ -135,6 +135,7 @@ async function mockGetRecommendation({ genre, useWishlist }) {
   return {
     game: mockGames[0],
     reasoning: 'Based on your preferences, Portal 2 is a great fit for you.',
+    matchScore: 92
   };
 }
 
