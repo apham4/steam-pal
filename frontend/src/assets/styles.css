@@ -4,6 +4,18 @@
   color: #66c0f4;
 }
 
+.recommendation-title {
+  font-size: 1.5rem;      /* Similar to text-h5 */
+  font-weight: bold;      /* Similar to font-weight-bold */
+  margin-bottom: 0.25rem; /* Similar to mb-1 */
+  color: #66c0f4;
+}
+
+.header {
+  font-weight: bold;
+  color: #66c0f4;
+}
+
 .subtitle {
   color: #b8b6b4;
 }

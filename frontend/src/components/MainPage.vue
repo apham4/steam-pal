@@ -1,14 +1,44 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useUserStore } from '../stores/user'
-import { getRecommendation, updatePreferences, logRecommendationRequest, logRecommendationActionTaken } from '../services/api'
+import { getRecommendation, getRecommendationHistory, logRecommendationRequest, logRecommendationActionTaken } from '../services/api'
 
+//#region General
 const tab = ref(0)
-const showRecommendation = ref(false)
 const userStore = useUserStore()
 const userProfile = computed(() => userStore.profile)
+
+const errorMsg = ref('')
+const snackbar = ref(false)
+
+// Watch for tab change
+watch(tab, async (newVal) => {
+  if (newVal === 1) {
+    // Past Recommendations tab
+    fetchRecommendationHistory(pastRecommendationsPage.value, pastRecommendationsPageSize.value)
+  } 
+})
+//#endregion
+
+
+//#region Recommendation Details
+const showRecommendation = ref(false)
 const recommendation = ref(null)
 const reasoning = ref('')
+
+function steamStoreUrl(gameId) {
+  return `https://store.steampowered.com/app/${gameId}`
+}
+
+function showRecommendationDetails(game) {
+  recommendation.value = game
+  reasoning.value = ''
+  showRecommendation.value = true
+}
+//#endregion
+
+
+//#region Get Recommendation
 const genres = [
   'Action', 'Adventure', 'RPG', 'Strategy', 'Simulation', 'Puzzle', 'Sports', 'Indie', 'Horror', 'Multiplayer'
 ]
@@ -17,8 +47,6 @@ const customGenre = ref('')
 const customGenres = ref([])
 const useWishlist = ref(false)
 const loading = ref(false)
-const errorMsg = ref('')
-const snackbar = ref(false)
 
 function addCustomGenre() {
   if (customGenre.value.trim()) {
@@ -32,12 +60,9 @@ function addCustomGenre() {
     customGenre.value = ''
   }
 }
+
 function removeCustomGenre(idx) {
   customGenres.value.splice(idx, 1)
-}
-
-function steamStoreUrl(gameId) {
-  return `https://store.steampowered.com/app/${gameId}`
 }
 
 async function fetchRecommendation() {
@@ -53,12 +78,6 @@ async function fetchRecommendation() {
     recommendation.value = result.game
     reasoning.value = result.reasoning
     showRecommendation.value = true
-    userStore.addPastRecommendation(result.game)
-    await updatePreferences({
-      liked: userStore.liked,
-      disliked: userStore.disliked,
-      pastRecommendations: userStore.pastRecommendations,
-    })
   } catch (err) {
     errorMsg.value = err?.message || 'Failed to get recommendation.'
     snackbar.value = true
@@ -66,66 +85,66 @@ async function fetchRecommendation() {
     loading.value = false
   }
 }
+//#endregion
 
-function showPastRecommendation(game) {
-  recommendation.value = game
-  reasoning.value = ''
-  showRecommendation.value = true
+
+//#region Past Recommendations
+// -- Past Recommendations data & states
+const pastRecommendations = ref([])
+const pastRecommendationsLoading = ref(false)
+const pastRecommendationsError = ref('')
+// -- Past Recommendations pagination
+const pastRecommendationsPage = ref(1)
+const pastRecommendationsPageSize = ref(7)
+const pastRecommendationsTotalPages = ref(1)
+
+function handlePastRecommendationsPageChange(newPage) {
+  fetchRecommendationHistory(newPage, pastRecommendationsPageSize.value)
 }
 
-function showRecommendationDetails(game) {
-  recommendation.value = game
-  reasoning.value = ''
-  showRecommendation.value = true
-}
-
-async function handlePreferenceUpdate(action, ...args) {
-  loading.value = true
-  errorMsg.value = ''
+async function fetchRecommendationHistory(pageNum, pageSize) {
+  pastRecommendationsLoading.value = true
+  pastRecommendationsError.value = ''
   try {
-    action(...args)
-    await updatePreferences({
-      liked: userStore.liked,
-      disliked: userStore.disliked,
-      pastRecommendations: userStore.pastRecommendations,
-    })
+    const result = await getRecommendationHistory(pageNum, pageSize)
+    pastRecommendations.value = result.recommendations || []
+    pastRecommendationsTotalPages.value = result.pages || 1
+    pastRecommendationsPage.value = result.currentPage || pageNum
   } catch (err) {
-    errorMsg.value = err?.message || 'Failed to update preferences.'
-    snackbar.value = true
+    pastRecommendationsError.value = err?.message || 'Failed to load history.'
+    pastRecommendations.value = []
   } finally {
-    loading.value = false
+    pastRecommendationsLoading.value = false
   }
 }
+//#endregion
 
+
+//#region Manage Preferences
 async function likeRecommendation(game) {
   await logRecommendationActionTaken('like', game.id);
-  return handlePreferenceUpdate(userStore.addLiked, game)
+  //
 }
 async function dislikeRecommendation(game) {
   await logRecommendationActionTaken('dislike', game.id);
-  return handlePreferenceUpdate(userStore.addDisliked, game)
+  //
 }
 async function handleViewOnSteam(game) {
   await logRecommendationActionTaken('view_store', game.id);
 }
-function removePastRecommendation(gameId) {
-  return handlePreferenceUpdate(userStore.removePastRecommendation, gameId)
-}
-function clearPastRecommendations() {
-  return handlePreferenceUpdate(userStore.clearPastRecommendations)
-}
 function removeLiked(gameId) {
-  return handlePreferenceUpdate(userStore.removeLiked, gameId)
+  //
 }
 function removeDisliked(gameId) {
-  return handlePreferenceUpdate(userStore.removeDisliked, gameId)
+  //
 }
 function moveLikedToDisliked(gameId) {
-  return handlePreferenceUpdate(userStore.moveLikedToDisliked, gameId)
+  //
 }
 function moveDislikedToLiked(gameId) {
-  return handlePreferenceUpdate(userStore.moveDislikedToLiked, gameId)
+  //
 }
+//#endregion
 </script>
 
 <template>
@@ -246,26 +265,44 @@ function moveDislikedToLiked(gameId) {
             <!-- Past Recommendations tab content -->
             <div v-if="tab === 1" class="d-flex flex-column align-center mt-4">
               <v-card class="pa-2" style="width:100%; max-width:600px; height:250px; overflow-y:auto;">
-                <div v-if="userStore.pastRecommendations.length === 0" class="d-flex align-center justify-center" style="height:100%;">
+                <div v-if="pastRecommendationsLoading" class="d-flex align-center justify-center" style="height:100%;">
+                  <v-progress-circular indeterminate color="primary" />
+                </div>
+                <div v-else-if="pastRecommendationsError" class="d-flex align-center justify-center" style="height:100%;">
+                  <span class="text-center">{{ pastRecommendationsError }}</span>
+                </div>
+                <div v-else-if="pastRecommendations.length === 0" class="d-flex align-center justify-center" style="height:100%;">
                   <span class="text-center">No recommendation history. Get started by going to the Get Recommendation tab.</span>
                 </div>
                 <v-list v-else>
                   <v-list-item
-                    v-for="game in userStore.pastRecommendations"
+                    v-for="game in pastRecommendations"
                     :key="game.id"
-                    @click="showPastRecommendation(game)"
+                    @click="showRecommendationDetails(game)"
                   >
                     <div style="display: flex; align-items: center; width: 100%;">
-                        <span style="flex: 1;">{{ game.title }}</span>
+                      <span style="flex: 1;">{{ game.title }}</span>
+                        <!-- Cut 
                         <v-btn icon @click.stop="removePastRecommendation(game.id)">
                             <v-icon>mdi-delete</v-icon>
                         </v-btn>
+                        -->
                     </div>
                   </v-list-item>
                 </v-list>
               </v-card>
+              <!-- Cut content 
               <div class="d-flex justify-center mt-2">
                 <v-btn color="error" @click="clearPastRecommendations">Clear All</v-btn>
+              </div> 
+              -->
+              <div class="d-flex justify-center mt-2" v-if="pastRecommendationsTotalPages > 1">
+                <v-pagination
+                  v-model="pastRecommendationsPage"
+                  :length="pastRecommendationsTotalPages"
+                  @input="handlePastRecommendationsPageChange"
+                  color="primary"
+                />
               </div>
             </div>
           </v-tab-item>
@@ -324,25 +361,39 @@ function moveDislikedToLiked(gameId) {
     <v-row v-if="showRecommendation" justify="center">
       <v-col cols="12" md="8">
         <v-card color="surface" dark>
-          <v-card-title class="text-center text-h5 font-weight-bold" style="justify-content: center;">Your Next Favorite Game</v-card-title>
+          <v-card-title class="text-center text-h5 font-weight-bold" style="justify-content: center;">
+            {{ reasoning ? 'Your Next Favorite Game' : 'Looking Back' }}
+          </v-card-title>
           <v-card-text>
             <div v-if="recommendation" class="d-flex flex-row align-center mb-2" style="min-height:190px;">
               <div style="display:flex; align-items:center;">
                 <v-img :src="recommendation.thumbnail" height="190" width="400" contain style="margin-right:16px;" />
               </div>
-              <v-card class="pa-2" color="background" dark style="flex:1; height:190px; display:flex; flex-direction:column; align-items:flex-start; justify-content:flex-start;">
-                <div class="text-h5 font-weight-bold mb-1">{{ recommendation.title }}</div>
-                <div>Release Date: {{ recommendation.releaseDate }}</div>
-                <div>Publisher: {{ recommendation.publisher }}</div>
-                <div>Developer: {{ recommendation.developer }}</div>
+              <v-card class="pa-2" color="background" dark style="flex:1; height:190px; display:flex; flex-direction:column; align-items:flex-start; justify-content:flex-start; overflow-y:auto;">
+                <div class="recommendation-title">{{ recommendation.title }}</div>
                 <div>
-                  Price: <span :style="recommendation.salePrice ? 'text-decoration: line-through;' : ''">{{ recommendation.price }}</span>
+                  <span class="header">Release Date:</span> {{ recommendation.releaseDate }}
+                </div>
+                <div>
+                  <span class="header">Publisher:</span> {{ recommendation.publisher }}
+                </div>
+                <div>
+                  <span class="header">Developer:</span> {{ recommendation.developer }}
+                </div>
+                <div>
+                  <span class="header">Price:</span> <span :style="recommendation.salePrice ? 'text-decoration: line-through;' : ''">{{ recommendation.price }}</span>
                   <span v-if="recommendation.salePrice" class="ml-2">{{ recommendation.salePrice }}</span>
                 </div>
-                <div> Short Description: {{ recommendation.description }}</div>
+                <div>
+                  <span class="header">Short Description:</span> {{ recommendation.description }}
+                </div>
               </v-card>
             </div>
             <v-card v-if="reasoning" class="mt-2 pa-2" color="background" dark>
+              <div class="header">
+                <v-icon left style="color: #66c0f4; vertical-align: middle;">mdi-alert-circle-outline</v-icon>
+                Why Steam Pal thinks this is your next favorite game:
+              </div>
               <div style="max-height: 80px; overflow-y: auto;">{{ reasoning }}</div>
             </v-card>
             <div class="d-flex justify-center mt-4" style="gap:20px;">
