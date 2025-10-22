@@ -7,6 +7,7 @@ import { getRecommendation, getRecommendationHistory, logRecommendationRequest, 
 const tab = ref(0)
 const userStore = useUserStore()
 const userProfile = computed(() => userStore.profile)
+const userMenu = ref(false)
 
 const errorMsg = ref('')
 const snackbar = ref(false)
@@ -149,41 +150,55 @@ function moveDislikedToLiked(gameId) {
 
 <template>
   <v-container fluid>
-    <!-- Steam Pal Title Header -->
-    <v-row justify="center">
+    <v-row justify="center" class="mb-2 mt-2" style="min-height:72px;">
       <v-col cols="12" md="8">
-        <div class="d-flex flex-column align-center">
-          <div class="d-flex align-center justify-center mb-2">
-            <img src="/icon.png" alt="Steam Pal Icon" style="width:48px; height:48px;" class="mr-2" />
-            <span class="steam-title">Steam Pal</span>
+        <div class="d-flex justify-space-between align-center flex-wrap">
+          <!-- Steam Pal Header (Left) -->
+          <div class="d-flex align-center">
+            <img src="/icon.png" alt="Steam Pal Icon" style="width:64px; height:64px;" class="mr-2" />
+            <div class="d-flex flex-column">
+              <span class="steam-title">Steam Pal</span>
+              <span class="subtitle">AI-Powered Game Recommendations for Steam Users</span>
+            </div>
           </div>
-          <div class="subtitle text-center mb-2">AI-Powered Game Recommendations for Steam Users</div>
+          <!-- User Section (Right) -->
+          <div>
+            <v-menu
+              v-model="userMenu"
+              :close-on-content-click="false"
+              offset-y
+            >
+              <template #activator="{ props }">
+                <div
+                  v-bind="props"
+                  class="d-flex align-center user-section-trigger"
+                  style="cursor:pointer;"
+                >
+                  <div class="d-flex flex-column align-end mr-2">
+                    <span class="font-weight-bold font-size-1">{{ userProfile?.display_name || "Steam User" }}</span>
+                    <span class="font-size-1">(Steam ID: {{ userProfile?.steam_id }})</span>
+                  </div>
+                  <v-avatar size="50">
+                    <template v-if="userProfile?.avatar_url">
+                      <img :src="userProfile?.avatar_url" alt="Avatar" style="object-fit: contain; width: 100%; height: 100%;" />
+                    </template>
+                    <template v-else>
+                      <v-icon size="40">mdi-account-circle</v-icon>
+                    </template>
+                  </v-avatar>
+                </div>
+              </template>
+              <v-list>
+                <v-list-item @click="$emit('changeUser'); userMenu = false">
+                  <v-list-item-title>Change User</v-list-item-title>
+                </v-list-item>
+              </v-list>
+            </v-menu>
+          </div>
         </div>
       </v-col>
     </v-row>
-
-    <!-- Current User Section -->
-    <v-row justify="center">
-      <v-col cols="12" md="8">
-        <v-card color="surface" dark>
-          <v-card-title class="d-flex align-center">
-            <v-avatar size="50" class="mr-2">
-              <template v-if="userProfile?.avatar_url">
-                <img :src="userProfile?.avatar_url" alt="Avatar" style="object-fit: contain; width: 100%; height: 100%;" />
-              </template>
-              <template v-else>
-                <v-icon size="40">mdi-account-circle</v-icon>
-              </template>
-            </v-avatar>
-            <span class="font-weight-bold font-size-1">{{ userProfile?.display_name || "Steam User" }}</span>
-            <span class="ml-2 font-size-1">(Steam ID: {{ userProfile?.steam_id }})</span>
-            <v-spacer />
-            <v-btn color="secondary" @click="$emit('changeUser')" class="ml-4">Change User</v-btn>
-          </v-card-title>
-        </v-card>
-      </v-col>
-    </v-row>
-
+    
     <!-- Action & Preferences Section -->
     <v-row justify="center">
       <v-col cols="12" md="8">
@@ -434,5 +449,12 @@ function moveDislikedToLiked(gameId) {
 .genre-checkbox-grid {
   width: 100%;
   max-width: 600px;
+}
+
+@media (max-width: 960px) {
+  .user-section-trigger {
+    justify-content: flex-start !important;
+    margin-top: 16px;
+  }
 }
 </style>
