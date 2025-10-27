@@ -489,7 +489,6 @@ def saveRecommendation(
         """, (steamId, gameId))
 
         if cursor.fetchone():
-            print(f"Game {gameId} already recommended to user {steamId}")
             return None
         
         # Insert new recommendation
@@ -518,7 +517,6 @@ def saveRecommendation(
         
         conn.commit()
         recId = cursor.lastrowid
-        print(f"Saved recommendation ID {recId} for game {gameId}")
         return recId
 
     except sqlite3.IntegrityError:

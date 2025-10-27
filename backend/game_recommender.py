@@ -21,48 +21,73 @@ class GameRecommender:
         steamId: str,
         gamingProfile: Dict,
         requestedGenres: List[str],
-        excludeGameIds: Set[str]
+        excludeGameIds: Set[str],
+        logPrefix: str,
+        maxRetries: int = 3
     ) -> Optional[Dict]:
         """
         Generate AI-Powered game recommendation
         """
-        print(f"Generating recommendation for user {steamId}")
         
-        # Ask AI to discover game
-        aiResult = self.llm.discoverGame(
-            gamingProfile=gamingProfile,
-            requestedGenres=requestedGenres,
-            excludeGameIds=excludeGameIds
-        )
-        
-        if not aiResult:
-            print("AI failed to generate recommendation")
-            return None
-        
-        # Extract AI result
-        gameId = aiResult['gameId']
-        title = aiResult['title']
-        reasoning = aiResult['reasoning']
-        matchScore = aiResult.get('matchScore', 85)
-        
-        print(f"The AI has recommended {title} with match score {matchScore}%")
+        # Validation loop
+        for attempt in range(maxRetries):
+            print(f"[{logPrefix}] > AI Attempt {attempt + 1}/{maxRetries}")
 
-        # Fetch game details from Steam
-        gameData = self._getGameDetails(gameId)
+            # Ask AI to discover game
+            aiResult = self.llm.discoverGame(
+                gamingProfile=gamingProfile,
+                requestedGenres=requestedGenres,
+                excludeGameIds=excludeGameIds
+            )
+            
+            if not aiResult:
+                print(f"[{logPrefix}] > AI failed to generate recommendation, retrying...")
+                continue
         
-        if not gameData:
-            print(f"Failed to fetch game {gameId}")
-            return None
-        
-        # Transform to frontend format
-        transformedGame = transformGameData(gameData)
+            # Extract AI result
+            gameId = aiResult['gameId']
+            title = aiResult['title']
+            reasoning = aiResult['reasoning']
+            matchScore = aiResult.get('matchScore', 85)
 
-        return {
-            "game": transformedGame,
-            "reasoning": reasoning,
-            "matchScore": matchScore
-        }
-    
+            print(f"[{logPrefix}] > AI suggested: {title} (ID: {gameId}) with match score {matchScore}%")
+
+            # Fetch game details from Steam
+            gameData = self._getGameDetails(gameId)
+        
+            if not gameData:
+                print(f"[{logPrefix}] > Failed to fetch game {gameId}")
+                excludeGameIds.add(gameId)
+                continue
+
+            steamTitle = gameData.get('name')
+            if not steamTitle:
+                print(f"[{logPrefix}] > Fetched game {gameId} has no title")
+                excludeGameIds.add(gameId)
+                continue
+
+            # Compare recommended title vs Steam API title
+            if steamTitle.strip().lower() != title.strip().lower():
+                print(f"[{logPrefix}] > Title mismatch: AI='{title}', Steam='{steamTitle}'. Retrying...")
+                excludeGameIds.add(gameId)
+                continue
+
+            # Validation success    
+            print(f"[{logPrefix}] > Validation success: {title}")
+
+            # Transform to frontend format
+            transformedGame = transformGameData(gameData)
+
+            return {
+                "game": transformedGame,
+                "reasoning": reasoning,
+                "matchScore": matchScore
+            }
+        
+        # If loop finishes, all retries failed
+        print(f"[{logPrefix}] > Failed all {maxRetries} attempts.")
+        return None
+
     def _getGameDetails(self, gameId: str) -> Optional[Dict]:
         """
         Get game details (cached or fetch)
@@ -86,6 +111,7 @@ def generateSmartRecommendation(
     gamingProfile: Dict,
     requestedGenres: List[str],
     excludeGameIds: Set[str],
+    logPrefix: str = "[Main:1]"
 ) -> Optional[Dict]:
     """
     Public API for generating recommendations
@@ -95,5 +121,6 @@ def generateSmartRecommendation(
         steamId=steamId,
         gamingProfile=gamingProfile,
         requestedGenres=requestedGenres,
-        excludeGameIds=excludeGameIds
+        excludeGameIds=excludeGameIds,
+        logPrefix=logPrefix
     )

@@ -270,35 +270,55 @@ async def getRecommendation(
         
         print(f"Excluding {len(excludeGameIds)} games")
 
-        # STEP 4: Generate recommendation
-        recommendation = generateSmartRecommendation(
-            steamId=steamId,
-            gamingProfile=gamingProfile,
-            requestedGenres=request.genres,
-            excludeGameIds=excludeGameIds,
-        )
-        
-        if not recommendation:
-            raise HTTPException(
-                status_code=404,
-                detail="No suitable games found. Try different genres or check back later."
+        # STEP 4: Generate recommendation with retries
+        maxAttempts = 3
+        for attempt in range(maxAttempts):
+            logPrefix = f"Main Attempt {attempt + 1}/{maxAttempts}"
+            print(f"[{logPrefix}] Generating new recommendation")    
+
+            recommendation = generateSmartRecommendation(
+                steamId=steamId,
+                gamingProfile=gamingProfile,
+                requestedGenres=request.genres,
+                excludeGameIds=excludeGameIds,
+                logPrefix=logPrefix
             )
-        
-        # STEP 5: Save recommendation to history
-        saveRecommendation(
-            steamId=steamId,
-            game=recommendation["game"],
-            reasoning=recommendation["reasoning"],
-            matchScore=recommendation["matchScore"],
-            requestedGenres=request.genres
-        )
-        
-        # STEP 6: Return to frontend
-        return Recommendation(
-            game=GameDetail(**recommendation["game"]),
-            reasoning=recommendation["reasoning"],
-            matchScore=recommendation["matchScore"]
-        )
+
+            if not recommendation:
+                print(f"[{logPrefix}] AI failed to generate recommendation. Retrying...")
+                continue
+    
+            # STEP 5: Save recommendation to history
+            saveResultId = saveRecommendation(
+                steamId=steamId,
+                game=recommendation["game"],
+                reasoning=recommendation["reasoning"],
+                matchScore=recommendation["matchScore"],
+                requestedGenres=request.genres
+            )
+
+            if saveResultId:
+                # Success - recommendation saved
+                print(f"[{logPrefix}] Recommendation saved with ID: {saveResultId}")
+
+                # STEP 6: Return to frontend
+                return Recommendation(
+                    game=GameDetail(**recommendation["game"]),
+                    reasoning=recommendation["reasoning"],
+                    matchScore=recommendation["matchScore"]
+                )
+            else:
+                gameId = recommendation["game"]["gameId"]
+                print(f"[{logPrefix}] Duplicate game detected: {gameId}. Retrying...")
+
+                excludeGameIds.add(gameId)
+
+        # If loop finishes, all attempts failed
+        print(f"Failed to find a new recommendation after {maxAttempts} attempts.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Failed to find a new recommendation after {maxAttempts} attempts. Please try again later."
+        )        
         
     except HTTPException:
         raise

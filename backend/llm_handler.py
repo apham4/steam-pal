@@ -1,10 +1,10 @@
 # AI integration for smart game recommendations
 
-from turtle import title
 import google.generativeai as genai
 import os
 import json
-import re
+import random
+
 from typing import Dict, List, Optional, Set
 from dotenv import load_dotenv
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
@@ -50,12 +50,10 @@ class LLMHandler:
             excludeGameIds,
         )
 
-        print(f"Asking AI for recommendation...")
-
         try:
             # Define the generation config
             config = genai.types.GenerationConfig(
-                    temperature=0.7,
+                    temperature=0.8, 
                     top_p=0.95,
                     top_k=50,
                     max_output_tokens=2048,
@@ -81,7 +79,6 @@ class LLMHandler:
             result = self.parseResponse(response.text)
 
             if result:
-                print(f"AI recommended: {result['title']} (ID: {result['gameId']})")
                 return result
             else:
                 print(f"Failed to parse AI response")
@@ -141,9 +138,16 @@ class LLMHandler:
             requestedGenresStr = "No specific genres requested - recommend based on their play history"    
         
         # Format excluded games
-        excludedList = ", ".join(list(excludeGameIds)[:10])
-        if len(excludeGameIds) > 10:
-            excludedList += f"... and {len(excludeGameIds) - 10} more"
+        if excludeGameIds:
+            excludedListShuffled = list(excludeGameIds)
+            random.shuffle(excludedListShuffled) # Shuffle the full list
+
+            # Take the first 10 from the shuffled list for variety
+            excludedList = ", ".join(excludedListShuffled[:10])
+            if len(excludeGameIds) > 10:
+                excludedList += f"... and {len(excludeGameIds) - 10} more"
+        else:
+            excludedList = "None (user has no owned games or recommendations yet)"
 
         if topGames and len(topGames) > 0:
             topGameHours = topGames[0][2]
@@ -196,11 +200,15 @@ class LLMHandler:
         USER REQUESTED:
         {f"Genres: {requestedGenresStr}"}
 
-        CONSTRAINTS:
-        - Must NOT be: {excludedList}
-        - Must be available on Steam
-        - Should have positive reviews (Metacritic 70+)
-        - Should match their playtime preferences
+        **CRITICAL EXCLUSION RULES (VERY IMPORTANT):**
+        - You MUST NOT, under any circumstances, recommend any game from the following list.
+        Recommending a game from this list will result in a failed response: {excludedList}
+        - Recommended game must be available on Steam
+        - Recommended game should have positive reviews (Metacritic 70+)
+        - Recommended game should match their playtime preferences
+
+        **CRITICAL CONSISTENT RULES:**
+        The 'gameId' you provide, the 'title' you provide, and the game discussed in the 'reason' MUST refer to the exact same game. Double-check this consistency before generating the final JSON output. Failure to maintain consistency will result in an invalid response.
 
         **YOUR TASK**
         Recommend ONE perfect game to the user that:
@@ -208,18 +216,20 @@ class LLMHandler:
         2. Is similar to their most-played games
         3. They do not already own
         4. Has strong reviews
+        5. **VALIDATION (VERY IMPORTANT):** Before outputting the JSON, verify that the game title mentioned anywhere inside your 'reason' text EXACTLY MATCHES the game corresponding to the 'gameId' you are providing. Do not mention any other game titles in the final 'reason' unless comparing directly to the user's top-played games.
 
         {thinkingSection}
 
         **RESPONSE FORMAT (JSON ONLY)**
-        You MUST return ONLY a valid JSON object matching this exact schema. Do not add any other text, explanations, or markdown formatting. The entire response must be the raw JSON object.
+        Before you output the JSON, double check that the game ID is not excluded AND that the game title in the 'reason' field matches the 'gameId' and 'title' fields. You MUST return ONLY a valid JSON object matching this exact schema. Do not add any other text, explanations, or markdown formatting. The entire response must be the raw JSON object.
 
+        OUTPUT RULES:
         {{
-          "gameId": "1621690",
-          "title": "Core Keeper",
-          "reasoning": "Since you loved the farming and exploration in Stardew Valley, you'll feel right at home in Core Keeper. It takes those ideas and adds co-op, massive underground caverns to mine, and epic boss fights.",
-          "matchScore": 92,
-          "similarTo": ["Stardew Valley", "Terraria"]
+          "gameId": ["The exact Steam App ID of the recommended game"],
+          "title": ["The exact, official title of the recommended game"],
+          "reasoning": "Write a compelling paragraph explaining WHY this game is a great fit for the user, referencing their specific games and play patterns. Ensure the game mentioned here matches the 'title' and 'gameId' fields.",
+          "matchScore": ...,
+          "similarTo": ["Up to 3 similar game titles"],
         }}
 
         **REASONING INSTRUCTIONS::**

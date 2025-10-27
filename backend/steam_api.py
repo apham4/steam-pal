@@ -81,38 +81,30 @@ def fetchGameDetailsWithRetry(gameId: str, maxRetries: int = 3) -> Optional[dict
                 
                 if data.get(gameId, {}).get("success"):
                     gameData = data[gameId]["data"]
-                    print(f"[Attempt {attempt + 1}] Success: {gameData.get('name')}")
                     return gameData
                 else:
                     # Game doesn't exist or is region-locked
-                    print(f"[Attempt {attempt + 1}] Game {gameId} not available")
                     return None
             
             # Rate limited
             elif response.status_code == 429:
-                print(f"[Attempt {attempt + 1}] Rate limited (429)")
                 shouldRetry = True
 
             # Server error    
             elif response.status_code >= 500:
-                print(f"[Attempt {attempt + 1}] Steam server error ({response.status_code})")
                 shouldRetry = True
 
              # Client error (404, 403, etc.)
             else:
-                print(f"[Attempt {attempt + 1}] HTTP {response.status_code}")
                 return None
         
         except requests.Timeout:
-            print(f"[Attempt {attempt + 1}] Request timeout")
             shouldRetry = True
         
         except requests.RequestException as e:
-            print(f"[Attempt {attempt + 1}] Request error: {e}")
             shouldRetry = True
         
         except Exception as e:
-            print(f"[Attempt {attempt + 1}] Unexpected error: {e}")
             shouldRetry = False # Unknown error - don't retry
 
         # Retry logic with exponential backoff
