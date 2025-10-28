@@ -5,7 +5,7 @@ import { useUserStore } from '../stores/user'
 // Toggle this to switch between mock and real API
 const MOCK_AUTH = false;
 const MOCK_RECOMMENDATIONS = false;
-const MOCK_AUDIT = true;
+const MOCK_AUDIT = false;
 
 // Axios instance for real API
 const api = axios.create({
@@ -70,16 +70,8 @@ export function getAllPreferences() {
   return MOCK_RECOMMENDATIONS ? mockGetAllPreferences() : realGetAllPreferences();
 }
 
-export function logUserLogin() {
-  return MOCK_AUDIT ? Promise.resolve({ success: true }) : realLogUserLogin();
-}
-
-export function logRecommendationRequest() {
-  return MOCK_AUDIT ? Promise.resolve({ success: true }) : realLogRecommendationRequest();
-}
-
-export function logRecommendationActionTaken(actionType, recommendationId) {
-  return MOCK_AUDIT ? Promise.resolve({ success: true }) : realLogRecommendationActionTaken(actionType, recommendationId);
+export function logUserEvent(eventType, gameId = null) {
+  return MOCK_AUDIT ? Promise.resolve({ success: true }) : realLogUserEvent(eventType, gameId);
 }
 // # endregion
 
@@ -333,50 +325,26 @@ async function realGetAllPreferences() {
   // res.data.totals has liked and disliked counts.
 }
 
-async function realLogUserLogin() {
-  const userId = useUserStore()?.profile?.steam_id;
-  const timestamp = new Date().toISOString();
+async function realLogUserEvent(eventType, gameId = null) {
+  try {
+    const userStore = useUserStore();
+    const steamId = userStore?.profile?.steam_id;
+    if (!steamId) throw new Error('Missing steamId in user profile');
 
-  if (!userId) {
-    throw new Error('Missing userId (steam_id) in user store profile');
+    const payload = {
+      steamId,
+      eventType,
+      gameId
+    };
+
+    // Remove gameId if null to match API spec
+    if (!gameId) delete payload.gameId;
+
+    const res = await api.post('/api/events/new', payload);
+    return res.data;
+  } catch (error) {
+    console.error('Error logging user event:', error);
+    throw error;
   }
-
-  const res = await api.post('/api/admin/events/logins', {
-    userId,
-    timestamp,
-  });
-  return res.data;
-}
-
-async function realLogRecommendationRequest() {
-  const userId = useUserStore()?.profile?.steam_id;
-  const timestamp = new Date().toISOString();
-
-  if (!userId) {
-    throw new Error('Missing userId (steam_id) in user store profile');
-  }
-
-  const res = await api.post('/api/admin/events/recommendations', {
-    userId,
-    timestamp,
-  });
-  return res.data;
-}
-
-async function realLogRecommendationActionTaken(actionType, recommendationId) {
-  const userId = useUserStore()?.profile?.steam_id;
-  const timestamp = new Date().toISOString();
-
-  if (!userId) {
-    throw new Error('Missing userId (steam_id) in user store profile');
-  }
-
-  const res = await api.post('/api/admin/events/actions', {
-    userId,
-    actionType,
-    recommendationId,
-    timestamp,
-  });
-  return res.data;
 }
 // #endregion

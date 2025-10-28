@@ -2,7 +2,8 @@ from fastapi import FastAPI, Depends, HTTPException, Query, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import RedirectResponse
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
+from typing import Optional
 from dotenv import load_dotenv
 from jwt.exceptions import InvalidTokenError
 import os
@@ -31,7 +32,9 @@ from db_helper import (
     getRecommendedGameIds,
     savePreference,
     getPreferenceGameIds,
-    deletePreference
+    deletePreference,
+    saveUserEvent,
+    getUserEvents,
 )
 
 from game_recommender import generateSmartRecommendation
@@ -509,6 +512,49 @@ def healthCheck():
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
+
+# USER EVENTS ENDPOINTS
+@app.post("/api/events/new")
+def createUserEvent(event: dict, currentUser: dict = Depends(verifyToken)):
+    """
+    Create a new user event.
+    """
+    steamId = currentUser["sub"]
+
+    # Accept both camelCase and snake_case for compatibility
+    eventType = event.get("eventType")
+    gameId = event.get("gameId")
+    timestamp = event.get("timestamp") or int(datetime.now(timezone.utc).timestamp())
+
+    if not eventType:
+        raise HTTPException(status_code=400, detail="Missing eventType in request body.")
+
+    success = saveUserEvent(steamId, eventType, gameId, timestamp)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to log user event.")
+
+    return {"message": "Action logged"}
+
+@app.get("/api/events")
+def get_user_events(
+    steamId: Optional[str] = Query(None, description="Filter by user Steam ID"),
+    eventType: Optional[str] = Query(None, description="Comma-separated event types"),
+    from_ts: int = Query(..., alias="from", description="Inclusive lower bound UNIX timestamp"),
+    to_ts: int = Query(..., alias="to", description="Inclusive upper bound UNIX timestamp")
+):
+    """
+    Get user events with optional filters.
+    """
+    # Parse event types if provided
+    eventTypes = [et.strip() for et in eventType.split(",")] if eventType else None
+
+    events = getUserEvents(
+        steamId=steamId,
+        eventTypes=eventTypes,
+        from_ts=from_ts,
+        to_ts=to_ts
+    )
+    return {"events": events}
 
 
 if __name__ == "__main__":

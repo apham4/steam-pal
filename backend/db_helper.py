@@ -95,6 +95,18 @@ def initDatabase():
                 cachedAt INTEGER NOT NULL
             )
         """)
+
+        # User events table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS userEvents (
+                eventId INTEGER PRIMARY KEY AUTOINCREMENT,
+                steamId TEXT NOT NULL,
+                eventType TEXT NOT NULL,
+                gameId TEXT,
+                timestamp INTEGER NOT NULL,
+                FOREIGN KEY (steamId) REFERENCES users(steamId)
+            )
+        """)
         
         # Create indexes for performance
         cursor.execute("""
@@ -697,6 +709,63 @@ def deletePreference(steamId: str, gameId: str) -> bool:
     finally:
         conn.close()
 
+# User Events Functions
+def saveUserEvent(steamId: str, eventType: str, gameId: str = None, timestamp: int = None) -> bool:
+    """
+    Save a user event to the userEvents table.
+    """
+    import time
+    if timestamp is None:
+        timestamp = int(time.time())
+    conn = getConnection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO userEvents (steamId, eventType, gameId, timestamp)
+            VALUES (?, ?, ?, ?)
+            """,
+            (steamId, eventType, gameId, timestamp)
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[saveUserEvent] Error: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+def getUserEvents(steamId: str = None, eventTypes: list = None, from_ts: int = None, to_ts: int = None) -> list:
+    """
+    Fetch user events filtered by steamId, eventTypes, and timestamp range.
+    """
+    conn = getConnection()
+    cursor = conn.cursor()
+    try:
+        query = "SELECT steamId, eventType, gameId, timestamp FROM userEvents WHERE 1=1"
+        params = []
+        if steamId:
+            query += " AND steamId = ?"
+            params.append(steamId)
+        if eventTypes:
+            query += " AND eventType IN ({})".format(",".join("?" for _ in eventTypes))
+            params.extend(eventTypes)
+        if from_ts is not None:
+            query += " AND timestamp >= ?"
+            params.append(from_ts)
+        if to_ts is not None:
+            query += " AND timestamp <= ?"
+            params.append(to_ts)
+        query += " ORDER BY timestamp DESC"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"Error fetching user events: {e}")
+        return []
+    finally:
+        conn.close()
 
 if __name__ == "__main__":
     print("Initializing database...")

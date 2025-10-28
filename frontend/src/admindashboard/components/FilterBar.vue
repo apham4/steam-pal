@@ -1,76 +1,144 @@
 <script setup>
-import { ref, computed } from 'vue';
-const emit = defineEmits(['filter-changed']);
+import { ref, watch, computed } from 'vue';
 
-const menu = ref(false);
-const dateRange = ref([]);
-const aggregation = ref('daily');
-const statType = ref('Logins');
+const emit = defineEmits(['retrieve-data']);
 
-const dateRangeText = computed(() => {
-  if (!dateRange.value.length) return '';
-  return dateRange.value.join(' to ');
-});
+const steamId = ref('');
+const eventTypes = ref(['login', 'logout']);
+const allEventTypes = [
+  { label: 'Login', value: 'login' },
+  { label: 'Logout', value: 'logout' },
+  { label: 'Request Recommendation', value: 'request_recommendation' },
+  { label: 'View Past Recommendation', value: 'view_past_recommendation' },
+  { label: 'View Store', value: 'view_store' },
+  { label: 'Like Recommendation', value: 'like_recommendation' },
+  { label: 'Dislike Recommendation', value: 'dislike_recommendation' },
+  { label: 'Remove Preference', value: 'remove_preference' }
+];
 
-function updateDateRange(val) {
-  dateRange.value = val;
+const timeRangeOptions = [
+  { label: 'Past 3 days', value: '3d' },
+  { label: 'Past week', value: '1w' },
+  { label: 'Past month', value: '1m' },
+  { label: 'Past 3 months', value: '3m' }
+];
+const timeRange = ref('3d');
+const from = ref(null);
+const to = ref(null);
+
+const fromMenu = ref(false);
+const toMenu = ref(false);
+
+const fromDisplay = computed(() => from.value ? new Date(from.value).toLocaleDateString() : '');
+const toDisplay = computed(() => to.value ? new Date(to.value).toLocaleDateString() : '');
+
+function setRange(range) {
+  const now = new Date();
+  let fromDate;
+  switch (range) {
+    case '3d':
+      fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2);
+      break;
+    case '1w':
+      fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+      break;
+    case '1m':
+      fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+      break;
+    case '3m':
+      fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 89);
+      break;
+    default:
+      return;
+  }
+  from.value = fromDate;
+  to.value = now;
 }
 
-function emitFilter() {
-  emit('filter-changed', {
-    dateRange: dateRange.value,
-    aggregation: aggregation.value,
-    statType: statType.value
+watch(timeRange, (val) => {
+  if (val !== 'custom') setRange(val);
+});
+
+function onRetrieve() {
+  if (!from.value || !to.value) return;
+  // Convert to UTC UNIX timestamps (seconds)
+  const fromTs = Math.floor(new Date(from.value).getTime() / 1000);
+  const toTs = Math.floor(new Date(to.value).getTime() / 1000);
+  emit('retrieve-data', {
+    steamId: steamId.value || undefined,
+    eventTypes: [...eventTypes.value],
+    from: fromTs,
+    to: toTs
   });
 }
 </script>
-
-<style scoped>
-.v-card {
-  max-width: 900px;
-  margin: auto;
-}
-</style>
 
 <template>
   <v-card class="mb-6">
     <v-card-title>Filters</v-card-title>
     <v-card-text>
       <v-row>
+        <v-col cols="12" md="3">
+          <v-text-field v-model="steamId" label="User Steam ID (optional)" />
+        </v-col>
         <v-col cols="12" md="4">
-          <v-menu v-model="menu" :close-on-content-click="false" transition="scale-transition" offset-y>
-            <template #activator="{ on, attrs }">
+          <div>Event Types:</div>
+          <v-checkbox
+            v-for="et in allEventTypes"
+            :key="et.value"
+            v-model="eventTypes"
+            :label="et.label"
+            :value="et.value"
+            hide-details
+            density="compact"
+            class="mr-2"
+          />
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-select
+            v-model="timeRange"
+            :items="timeRangeOptions"
+            item-title="label"
+            item-value="value"
+            label="Time Range"
+          />
+        </v-col>
+        <v-col cols="12" md="3">
+          <v-menu
+            v-model="fromMenu"
+            :close-on-content-click="false"
+            transition="scale-transition"
+            offset-y
+          >
+            <template v-slot:activator="{ props }">
               <v-text-field
-                v-model="dateRangeText"
-                label="Date Range"
+                :model-value="fromDisplay"
+                label="From"
                 readonly
-                v-bind="attrs"
-                v-on="on"
+                v-bind="props"
               />
             </template>
-            <v-date-picker
-              v-model="dateRange"
-              range
-              @change="updateDateRange"
-            />
+            <v-date-picker v-model="from" @update:modelValue="fromMenu = false" />
+          </v-menu>
+          <v-menu
+            v-model="toMenu"
+            :close-on-content-click="false"
+            transition="scale-transition"
+            offset-y
+          >
+            <template v-slot:activator="{ props }">
+              <v-text-field
+                :model-value="toDisplay"
+                label="To"
+                readonly
+                v-bind="props"
+              />
+            </template>
+            <v-date-picker v-model="to" @update:modelValue="toMenu = false" />
           </v-menu>
         </v-col>
-        <v-col cols="12" md="4">
-          <v-select
-            v-model="aggregation"
-            :items="['daily', 'weekly', 'monthly']"
-            label="Aggregation"
-          />
-        </v-col>
-        <v-col cols="12" md="4">
-          <v-select
-            v-model="statType"
-            :items="['Logins', 'Recommendation Requests', 'Actions Taken']"
-            label="Stat Type"
-          />
-        </v-col>
       </v-row>
-      <v-btn color="primary" @click="emitFilter">Apply Filters</v-btn>
+      <v-btn color="primary" @click="onRetrieve" :disabled="!from || !to">Retrieve Data</v-btn>
     </v-card-text>
   </v-card>
 </template>

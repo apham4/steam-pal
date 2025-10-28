@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { usePreferenceStore } from '@/stores/preference'
-import { getRecommendation, getRecommendationHistory, likeGame, dislikeGame, removePreference, getLikedGames, getDislikedGames, logRecommendationRequest, logRecommendationActionTaken } from '../services/api'
+import { getRecommendation, getRecommendationHistory, likeGame, dislikeGame, removePreference, getLikedGames, getDislikedGames, logUserEvent } from '../services/api'
 
 //#region General
 const tab = ref(0)
@@ -38,6 +38,7 @@ function steamStoreUrl(gameId) {
 }
 
 function showRecommendationDetails(game) {
+  logUserEvent('view_past_recommendation', game.gameId)
   recommendation.value = game
   reasoning.value = ''
   matchScore.value = -1
@@ -77,7 +78,7 @@ async function fetchRecommendation() {
   loading.value = true
   errorMsg.value = ''
   try {
-    await logRecommendationRequest();
+    await logUserEvent('recommendation_request');
     const allGenres = [...selectedGenres.value, ...customGenres.value]
     const result = await getRecommendation({
       genres: allGenres, // send array, can be empty
@@ -154,7 +155,7 @@ async function likeRecommendation(game) {
   preferenceStore.addLiked(game)
   await Promise.all([
       likeGame(game.gameId),
-      logRecommendationActionTaken('like', game.gameId)
+      logUserEvent('like_recommendation', game.gameId)
     ])
 }
 
@@ -167,19 +168,19 @@ async function dislikeRecommendation(game) {
   preferenceStore.addDisliked(game)
   await Promise.all([
       dislikeGame(game.gameId),
-      logRecommendationActionTaken('dislike', game.gameId)
+      logUserEvent('dislike_recommendation', game.gameId)
     ])
 }
 
 async function handleViewOnSteam(game) {
-  await logRecommendationActionTaken('view_store', game.gameId)
+  await logUserEvent('view_store', game.gameId)
 }
 
 async function removeRecommendationPreference(game) {
   preferenceStore.removeStoredPreference(game)
   await Promise.all([
       removePreference(game.gameId),
-      logRecommendationActionTaken('remove_preference', game.gameId)
+      logUserEvent('remove_preference', game.gameId)
     ])
 }
 //#endregion

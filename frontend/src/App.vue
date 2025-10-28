@@ -5,7 +5,7 @@ import MainPage from './components/MainPage.vue'
 import { onMounted, computed } from 'vue'
 import { useUserStore } from './stores/user'
 import { usePreferenceStore } from './stores/preference'
-import { logUserLogin, getCurrentUser, logOut } from './services/api'
+import { logUserEvent, getCurrentUser, logOut } from './services/api'
 
 const currentView = ref(markRaw(UserPage))
 const userStore = useUserStore()
@@ -28,7 +28,7 @@ onMounted(() => {
         userStore.setProfile(profile)
         // Switch to MainPage if authenticated
         currentView.value = markRaw(MainPage)
-        logUserLogin() // Log the login event
+        logUserEvent('login') // Log the login event
       } catch (err) {
         // Handle errors (e.g., invalid token)
         console.error('Failed to fetch user profile:', err)
@@ -52,6 +52,7 @@ function updateTitle() {
 }
 
 function handleChangeUser() {
+  logUserEvent('logout') // Log the logout event
   userStore.logout()
   preferenceStore.clearPreferences()
   logOut() // Call the logout API
