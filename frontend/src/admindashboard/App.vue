@@ -109,7 +109,7 @@ async function onRetrieveData(filterObj) {
             <h2>No Data</h2>
           </div>
         </div>
-        <div class="d-flex align-center mt-4">
+        <div class="d-flex flex-column align-start mt-4">
           <v-checkbox v-model="getRawData" label="Get raw data" />
           <export-button :data="getRawData ? rawData : chartData" :raw="getRawData" />
         </div>

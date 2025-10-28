@@ -16,6 +16,15 @@ const allEventTypes = [
   { label: 'Remove Preference', value: 'remove_preference' }
 ];
 
+const chunkedEventTypes = computed(() => {
+  const chunkSize = 4;
+  const chunks = [];
+  for (let i = 0; i < allEventTypes.length; i += chunkSize) {
+    chunks.push(allEventTypes.slice(i, i + chunkSize));
+  }
+  return chunks;
+});
+
 const timeRangeOptions = [
   { label: 'Past 3 days', value: '3d' },
   { label: 'Past week', value: '1w' },
@@ -78,23 +87,37 @@ function onRetrieve() {
     <v-card-title>Filters</v-card-title>
     <v-card-text>
       <v-row>
-        <v-col cols="12" md="3">
+        <v-col cols="12" md="6">
+          <v-row>
+            <v-col
+              v-for="(chunk, idx) in chunkedEventTypes"
+              :key="idx"
+              cols="12"
+              sm="14"
+              md="14"
+              lg="6"
+            >
+              <v-checkbox
+                v-for="et in chunk"
+                :key="et.value"
+                v-model="eventTypes"
+                :label="et.label"
+                :value="et.value"
+                hide-details
+                density="compact"
+                class="mr-2"
+              />
+            </v-col>
+          </v-row>
+        </v-col>
+      </v-row>
+      <v-row>
+        <v-col cols="12" md="6">
           <v-text-field v-model="steamId" label="User Steam ID (optional)" />
         </v-col>
-        <v-col cols="12" md="4">
-          <div>Event Types:</div>
-          <v-checkbox
-            v-for="et in allEventTypes"
-            :key="et.value"
-            v-model="eventTypes"
-            :label="et.label"
-            :value="et.value"
-            hide-details
-            density="compact"
-            class="mr-2"
-          />
-        </v-col>
-        <v-col cols="12" md="2">
+      </v-row>
+      <v-row>
+        <v-col cols="12" md="3">
           <v-select
             v-model="timeRange"
             :items="timeRangeOptions"
@@ -138,7 +161,7 @@ function onRetrieve() {
           </v-menu>
         </v-col>
       </v-row>
-      <v-btn color="primary" @click="onRetrieve" :disabled="!from || !to">Retrieve Data</v-btn>
+      <v-btn class="mt-6" color="primary" @click="onRetrieve" :disabled="!from || !to">Retrieve Data</v-btn>
     </v-card-text>
   </v-card>
 </template>
