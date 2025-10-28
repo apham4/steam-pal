@@ -1,5 +1,7 @@
 # Main recommendation engine
 
+import re
+
 from typing import Dict, List, Optional, Set
 from llm_handler import getLLMHandler
 from steam_api import fetchGameDetailsWithRetry, transformGameData
@@ -16,6 +18,14 @@ class GameRecommender:
         """
         self.llm = getLLMHandler(llmProvider)
     
+    def normalizeTitle(self, title: str) -> str:
+        """
+        Remove non-alphanumeric chars and convert to lowercase
+        """
+        if not title:
+            return ""
+        return re.sub(r'[^a-zA-Z0-9]', '', title).lower()
+
     def generateRecommendation(
         self,
         steamId: str,
@@ -66,8 +76,12 @@ class GameRecommender:
                 excludeGameIds.add(gameId)
                 continue
 
+            # Normalize titles for comparison
+            titleNorm = self.normalizeTitle(title)
+            steamTitleNorm = self.normalizeTitle(steamTitle)
+
             # Compare recommended title vs Steam API title
-            if steamTitle.strip().lower() != title.strip().lower():
+            if titleNorm not in steamTitleNorm and steamTitleNorm not in titleNorm:
                 print(f"[{logPrefix}] > Title mismatch: AI='{title}', Steam='{steamTitle}'. Retrying...")
                 excludeGameIds.add(gameId)
                 continue
