@@ -452,8 +452,8 @@ async function removeRecommendationPreference(game) {
                   <span class="header">Developer:</span> {{ recommendation.developer }}
                 </div>
                 <div>
-                  <span class="header">Price:</span> <span :style="recommendation.salePrice ? 'text-decoration: line-through;' : ''">{{ recommendation.price }}</span>
-                  <span v-if="recommendation.salePrice" class="ml-2">{{ recommendation.salePrice }}</span>
+                  <span class="header">Price:</span> <span :style="recommendation.salePrice != recommendation.price ? 'text-decoration: line-through;' : ''">{{ recommendation.price }}</span>
+                  <span v-if="recommendation.salePrice != recommendation.price" class="ml-2">{{ recommendation.salePrice }}</span>
                 </div>
                 <div>
                   <span class="header">Short Description:</span> {{ recommendation.description }}
