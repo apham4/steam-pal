@@ -1,7 +1,8 @@
 import sys
 import pytest
+import json
 from pydantic import ValidationError
-from models import RecommendationRequest, GameDetail, Recommendation
+from models import RecommendationRequest, GameDetail, Recommendation, FilterGenresResponse
 from pathlib import Path
 
 # Add backend to path
@@ -140,6 +141,74 @@ class TestRecommendation:
         assert 'reasoning' in json_data
         assert json_data['game']['title'] == sample_game_data['title']
 
+
+class TestFilterGenresModel:
+    """Test FilterGenres response model"""
+    
+    def test_filter_genres_response_complete(self):
+        """Test creating complete filter genres response"""
+        
+        response = FilterGenresResponse(
+            steamId='76561197960287930',
+            savedGenres=['Horror', 'Survival', 'Co-op']
+        )
+        
+        assert response.steamId == '76561197960287930'
+        assert response.savedGenres == ['Horror', 'Survival', 'Co-op']
+    
+    def test_filter_genres_response_serialization(self):
+        """Test response serialization with aliases"""
+        
+        response = FilterGenresResponse(
+            steamId='76561197960287930',
+            savedGenres=['RPG']
+        )
+        
+        serialized = response.model_dump(by_alias=True)
+        
+        assert 'steam_id' in serialized
+        assert 'saved_genres' in serialized
+        assert serialized['steam_id'] == '76561197960287930'
+        assert serialized['saved_genres'] == ['RPG']
+    
+    def test_filter_genres_response_empty_genres(self):
+        """Test response with empty genres list"""
+        
+        response = FilterGenresResponse(
+            steamId='76561197960287930',
+            savedGenres=[]
+        )
+        
+        assert response.savedGenres == []
+    
+    def test_filter_genres_response_many_genres(self):
+        """Test response with many genres"""
+        
+        genres = ['RPG', 'Action', 'Adventure', 'Horror', 'Survival', 
+                  'Co-op', 'Single-Player', 'Open World']
+        
+        response = FilterGenresResponse(
+            steamId='76561197960287930',
+            savedGenres=genres
+        )
+        
+        assert len(response.savedGenres) == 8
+        assert 'RPG' in response.savedGenres
+    
+    def test_filter_genres_response_json_serialization(self):
+        """Test JSON serialization"""
+        
+        response = FilterGenresResponse(
+            steamId='76561197960287930',
+            savedGenres=['RPG', 'Action']
+        )
+        
+        json_str = response.model_dump_json(by_alias=True)
+        parsed = json.loads(json_str)
+        
+        assert parsed['steam_id'] == '76561197960287930'
+        assert parsed['saved_genres'] == ['RPG', 'Action']
+        
 
 class TestModelEdgeCases:
     """Test edge cases and boundary conditions"""

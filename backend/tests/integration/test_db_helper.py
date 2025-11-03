@@ -27,7 +27,7 @@ class TestDatabaseInitialization:
         tables = [row[0] for row in cursor.fetchall()]
         conn.close()
         
-        expected_tables = ['gameCache', 'ownedGames', 'preferences', 'recommendations', 'users']
+        expected_tables = ['gameCache', 'ownedGames', 'preferences', 'recommendations', 'users', 'userEvents', 'filterGenres']
         for table in expected_tables:
             assert table in tables, f"Table {table} not created"
     
@@ -48,6 +48,9 @@ class TestDatabaseInitialization:
         # Should have at least these indexes
         assert 'idx_recommendations_user' in indexes
         assert 'idx_preferences_user' in indexes
+        assert 'idx_ownedGames_user' in indexes
+        assert 'idx_ownedGames_playtime' in indexes
+        assert 'idx_filter_genres_user' in indexes
 
 class TestUserManagement:
     """Test user management functions"""
@@ -440,6 +443,183 @@ class TestPreferences:
         """Test getting preferences when none exist"""
         liked_ids = db_helper.getPreferenceGameIds(sample_user_data['steamId'], 'liked')
         assert len(liked_ids) == 0
+
+
+class TestFilterGenres:
+    """Test filter genres management (Feature 6)"""
+    
+    def test_save_filter_genres_new(self, test_db_connection, sample_user_data):
+        """Test saving new filter genres"""
+        genres = ['RPG', 'Action', 'Open World']
+        
+        result = db_helper.saveFilterGenres(
+            sample_user_data['steamId'],
+            genres
+        )
+        
+        assert result is True
+        
+        # Verify saved
+        saved_genres = db_helper.getFilterGenres(sample_user_data['steamId'])
+        assert saved_genres == genres
+    
+    def test_save_filter_genres_update_existing(self, test_db_connection, sample_user_data):
+        """Test updating existing filter genres"""
+        # First save
+        db_helper.saveFilterGenres(
+            sample_user_data['steamId'],
+            ['RPG', 'Action']
+        )
+        
+        # Update with new genres
+        new_genres = ['Horror', 'Survival']
+        result = db_helper.saveFilterGenres(
+            sample_user_data['steamId'],
+            new_genres
+        )
+        
+        assert result is True
+        
+        # Verify updated
+        saved_genres = db_helper.getFilterGenres(sample_user_data['steamId'])
+        assert saved_genres == new_genres
+        assert 'RPG' not in saved_genres
+    
+    def test_save_filter_genres_empty_list(self, test_db_connection, sample_user_data):
+        """Test saving empty genres list"""
+        result = db_helper.saveFilterGenres(
+            sample_user_data['steamId'],
+            []
+        )
+        
+        assert result is True
+        
+        saved_genres = db_helper.getFilterGenres(sample_user_data['steamId'])
+        assert saved_genres == []
+    
+    def test_get_filter_genres_not_exists(self, test_db_connection, sample_user_data):
+        """Test getting filter genres when none exist"""
+        genres = db_helper.getFilterGenres(sample_user_data['steamId'])
+        assert genres is None
+    
+    def test_get_filter_genres_invalid_steam_id(self, test_db_connection):
+        """Test getting filter genres with invalid Steam ID"""
+        genres = db_helper.getFilterGenres('invalid_steam_id')
+        assert genres is None
+    
+    def test_delete_filter_genres(self, test_db_connection, sample_user_data):
+        """Test deleting filter genres"""
+        # First save
+        db_helper.saveFilterGenres(
+            sample_user_data['steamId'],
+            ['RPG', 'Action']
+        )
+        
+        # Delete
+        result = db_helper.deleteFilterGenres(sample_user_data['steamId'])
+        assert result is True
+        
+        # Verify deleted
+        genres = db_helper.getFilterGenres(sample_user_data['steamId'])
+        assert genres is None
+    
+    def test_delete_filter_genres_not_exists(self, test_db_connection, sample_user_data):
+        """Test deleting filter genres when none exist"""
+        result = db_helper.deleteFilterGenres(sample_user_data['steamId'])
+        assert result is True  # Should succeed even if nothing to delete
+    
+    def test_filter_genres_multiple_users(self, test_db_connection, sample_user_data):
+        """Test filter genres isolation between users"""
+        steam_id_1 = sample_user_data['steamId']
+        steam_id_2 = '76561197960287931'
+        
+        # Save user 2 first
+        db_helper.saveUser(steam_id_2, 'User 2', '', '')
+        
+        # Save for user 1
+        db_helper.saveFilterGenres(steam_id_1, ['RPG', 'Action'])
+        
+        # Save for user 2
+        db_helper.saveFilterGenres(steam_id_2, ['Horror', 'Survival'])
+        
+        # Verify isolation
+        genres_1 = db_helper.getFilterGenres(steam_id_1)
+        genres_2 = db_helper.getFilterGenres(steam_id_2)
+        
+        assert genres_1 == ['RPG', 'Action']
+        assert genres_2 == ['Horror', 'Survival']
+    
+    def test_filter_genres_special_characters(self, test_db_connection, sample_user_data):
+        """Test filter genres with special characters"""
+        genres = ['Action & Adventure', 'Sci-Fi', 'Story-Rich']
+        
+        result = db_helper.saveFilterGenres(
+            sample_user_data['steamId'],
+            genres
+        )
+        
+        assert result is True
+        
+        saved_genres = db_helper.getFilterGenres(sample_user_data['steamId'])
+        assert saved_genres == genres
+    
+    def test_filter_genres_unicode(self, test_db_connection, sample_user_data):
+        """Test filter genres with unicode characters"""
+        genres = ['アクション', '冒険', 'РПГ']
+        
+        result = db_helper.saveFilterGenres(
+            sample_user_data['steamId'],
+            genres
+        )
+        
+        assert result is True
+        
+        saved_genres = db_helper.getFilterGenres(sample_user_data['steamId'])
+        assert saved_genres == genres
+    
+    def test_filter_genres_very_long_list(self, test_db_connection, sample_user_data):
+        """Test saving very long list of genres"""
+        genres = [f"Genre{i}" for i in range(100)]
+        
+        result = db_helper.saveFilterGenres(
+            sample_user_data['steamId'],
+            genres
+        )
+        
+        assert result is True
+        
+        saved = db_helper.getFilterGenres(sample_user_data['steamId'])
+        assert len(saved) == 100
+    
+    def test_filter_genres_persistence(self, test_db_connection, sample_user_data):
+        """Test that filter genres persist across connections"""
+        genres = ['RPG', 'Action']
+        
+        # Save
+        db_helper.saveFilterGenres(
+            sample_user_data['steamId'],
+            genres
+        )
+        
+        # Simulate new connection by querying again
+        saved = db_helper.getFilterGenres(sample_user_data['steamId'])
+        
+        assert saved == genres
+    
+    def test_filter_genres_duplicate_values(self, test_db_connection, sample_user_data):
+        """Test saving genres with duplicates"""
+        genres = ['RPG', 'Action', 'RPG', 'Action', 'RPG']
+        
+        result = db_helper.saveFilterGenres(
+            sample_user_data['steamId'],
+            genres
+        )
+        
+        assert result is True
+        
+        # Should preserve duplicates
+        saved = db_helper.getFilterGenres(sample_user_data['steamId'])
+        assert saved == genres
 
 
 class TestDatabaseErrorHandling:

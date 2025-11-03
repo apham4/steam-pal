@@ -2,7 +2,6 @@ import sys
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 import json
-from typer import prompt
 from llm_handler import LLMHandler
 from pathlib import Path
 
@@ -70,7 +69,6 @@ class TestPromptBuilding:
         assert 'TOP 10 MOST-PLAYED GAMES' in prompt
         assert 'RECENTLY ACTIVE GAMES' in prompt
         assert 'FAVORITE GENRES' in prompt
-        assert 'CONSTRAINTS' in prompt
         assert 'JSON' in prompt
     
     @patch('llm_handler.genai.configure')

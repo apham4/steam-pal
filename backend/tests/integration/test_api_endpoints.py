@@ -215,3 +215,117 @@ class TestRecommendationHistoryEndpoints:
         assert "recommendations" in data
         assert len(data["recommendations"]) == 1
         assert data["total"] == 1
+
+
+class TestAdvancedFilteringEndpoints:
+    """Test Advanced Filtering Endpoints"""
+
+    @patch('main.getFilterGenres')
+    def test_get_filter_genres_exists(self, mock_get):
+        """Test GET /api/filters/genres when preferences exist"""
+        token = createJwtToken("76561197960287930", "Test User", "")
+        
+        mock_get.return_value = ["Horror", "Survival", "Co-op"]
+        
+        response = client.get(
+            "/api/filters/genres",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["steam_id"] == "76561197960287930"
+        assert data["saved_genres"] == ["Horror", "Survival", "Co-op"]
+
+    @patch('main.getFilterGenres')
+    def test_get_filter_genres_not_exists(self, mock_get):
+        """Test GET /api/filters/genres when no preferences exist"""
+        token = createJwtToken("76561197960287930", "Test User", "")
+        
+        mock_get.return_value = None
+        
+        response = client.get(
+            "/api/filters/genres",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["saved_genres"] == []
+    
+    def test_get_filter_genres_unauthorized(self):
+        """Test GET /api/filters/genres without authentication"""
+        response = client.get("/api/filters/genres")
+        assert response.status_code == 403
+
+    @patch('main.getFilterGenres')
+    def test_get_filter_genres_error_handling(self, mock_get):
+        """Test GET /api/filters/genres handles database errors"""
+        token = createJwtToken("76561197960287930", "Test User", "")
+        
+        mock_get.side_effect = Exception("Database error")
+        
+        response = client.get(
+            "/api/filters/genres",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        
+        assert response.status_code == 500
+
+    def test_get_available_genres_success(self):
+        """Test GET /api/filters/available-genres returns all categories"""
+        response = client.get("/api/filters/available-genres")
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Verify structure
+        assert "genres" in data
+        assert "tags" in data
+        assert "modes" in data
+        
+        # Verify types
+        assert isinstance(data["genres"], list)
+        assert isinstance(data["tags"], list)
+        assert isinstance(data["modes"], list)
+        
+        # Verify content
+        assert "Action" in data["genres"]
+        assert "Horror" in data["tags"]
+        assert "Single-player" in data["modes"]
+
+    def test_get_available_genres_no_auth_required(self):
+        """Test GET /api/filters/available-genres doesn't require authentication"""
+        response = client.get("/api/filters/available-genres")
+        
+        # Should succeed without Authorization header
+        assert response.status_code == 200
+    
+    def test_get_available_genres_no_duplicates(self):
+        """Test GET /api/filters/available-genres has no duplicate values"""
+        response = client.get("/api/filters/available-genres")
+        data = response.json()
+        
+        # Check no duplicates in each category
+        assert len(data["genres"]) == len(set(data["genres"]))
+        assert len(data["tags"]) == len(set(data["tags"]))
+        assert len(data["modes"]) == len(set(data["modes"]))
+    
+    def test_get_available_genres_complete_lists(self):
+        """Test GET /api/filters/available-genres returns expected values"""
+        response = client.get("/api/filters/available-genres")
+        data = response.json()
+        
+        # Check specific expected values
+        expected_genres = ["Action", "Adventure", "Strategy"]
+        expected_tags = ["Horror", "Sci-Fi", "Survival"]
+        expected_modes = ["Single-player", "Multiplayer", "Co-op"]
+        
+        for genre in expected_genres:
+            assert genre in data["genres"], f"Missing genre: {genre}"
+        
+        for tag in expected_tags:
+            assert tag in data["tags"], f"Missing tag: {tag}"
+        
+        for mode in expected_modes:
+            assert mode in data["modes"], f"Missing mode: {mode}"
