@@ -53,3 +53,8 @@ class Recommendation(BaseModel):
     game: GameDetail
     reasoning: str
     matchScore: int = Field(85, serialization_alias="match_score")
+
+class FilterGenresResponse(BaseModel):
+    """Model for filter genres response"""
+    steamId: str = Field(..., serialization_alias="steam_id")
+    savedGenres: List[str] = Field(..., serialization_alias="saved_genres")

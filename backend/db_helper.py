@@ -107,6 +107,16 @@ def initDatabase():
                 FOREIGN KEY (steamId) REFERENCES users(steamId)
             )
         """)
+
+        # User filter genres table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS filterGenres (
+                steamId TEXT PRIMARY KEY,
+                savedGenres TEXT DEFAULT '[]',
+                updatedAt INTEGER NOT NULL,
+                FOREIGN KEY (steamId) REFERENCES users(steamId)
+            )
+        """)
         
         # Create indexes for performance
         cursor.execute("""
@@ -127,6 +137,11 @@ def initDatabase():
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_ownedGames_playtime
             ON ownedGames(steamId, playtimeForever DESC)
+        """)
+
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_filter_genres_user
+            on filterGenres(steamId)
         """)
         
         conn.commit()
@@ -764,6 +779,85 @@ def getUserEvents(steamId: str = None, eventTypes: list = None, from_ts: int = N
     except Exception as e:
         print(f"Error fetching user events: {e}")
         return []
+    finally:
+        conn.close()
+
+
+# Filter Management Functions
+def saveFilterGenres(steamId: str, savedGenres: List[str]) -> bool:
+    """
+    Save user's requested genres/tags/mechanics filter preferences
+    """
+    conn = getConnection()
+    cursor = conn.cursor()
+    
+    try:
+        currentTime = int(time.time())
+        
+        cursor.execute("""
+            INSERT OR REPLACE INTO filterGenres
+            (steamId, savedGenres, updatedAt)
+            VALUES (?, ?, ?)
+        """, (
+            steamId,
+            json.dumps(savedGenres),
+            currentTime
+        ))
+        
+        conn.commit()
+        return True
+        
+    except Exception as e:
+        conn.rollback()
+        print(f"Error saving filter preferences: {e}")
+        return False
+    finally:
+        conn.close()
+
+def getFilterGenres(steamId: str) -> Optional[List[str]]:
+    """
+    Get user's saved requested genres/tags/mechanics
+    """
+    conn = getConnection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT savedGenres FROM filterGenres WHERE steamId = ?
+        """, (steamId,))
+        
+        row = cursor.fetchone()
+        
+        if row:
+            return json.loads(row["savedGenres"])
+        
+        return None
+        
+    except Exception as e:
+        print(f"Error getting filter preferences: {e}")
+        return None
+    finally:
+        conn.close()
+
+def deleteFilterGenres(steamId: str) -> bool:
+    """
+    Clear user's filter preferences (reset to defaults)
+    """
+    conn = getConnection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            DELETE FROM filterGenres WHERE steamId = ?
+        """, (steamId,))
+        
+        conn.commit()
+        return True
+        
+    except Exception as e:
+        conn.rollback()
+        print(f"Error deleting filter preferences: {e}")
+        return False
     finally:
         conn.close()
 

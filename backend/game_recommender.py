@@ -28,7 +28,6 @@ class GameRecommender:
 
     def generateRecommendation(
         self,
-        steamId: str,
         gamingProfile: Dict,
         requestedGenres: List[str],
         excludeGameIds: Set[str],
@@ -121,7 +120,6 @@ class GameRecommender:
     
 
 def generateSmartRecommendation(
-    steamId: str,
     gamingProfile: Dict,
     requestedGenres: List[str],
     excludeGameIds: Set[str],
@@ -132,7 +130,6 @@ def generateSmartRecommendation(
     """
     recommender = GameRecommender()
     return recommender.generateRecommendation(
-        steamId=steamId,
         gamingProfile=gamingProfile,
         requestedGenres=requestedGenres,
         excludeGameIds=excludeGameIds,

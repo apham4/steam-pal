@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, Query, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import RedirectResponse
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from dotenv import load_dotenv
 from jwt.exceptions import InvalidTokenError
@@ -10,7 +10,14 @@ import os
 import requests
 import jwt
 
-from models import UserResponse, RecommendationRequest, Recommendation, GameDetail
+from models import (
+    UserResponse, 
+    RecommendationRequest, 
+    Recommendation, 
+    GameDetail, 
+    FilterGenresResponse
+)
+
 from steam_api import (
     fetchUserOwnedGames,
     fetchGameDetailsWithRetry,
@@ -35,6 +42,8 @@ from db_helper import (
     deletePreference,
     saveUserEvent,
     getUserEvents,
+    saveFilterGenres,
+    getFilterGenres,
 )
 
 from game_recommender import generateSmartRecommendation
@@ -263,7 +272,23 @@ async def getRecommendation(
         gamingProfile = getUserGamingProfile(steamId)
         print(f"Gaming Profile: {gamingProfile['gameCount']} games, {gamingProfile['totalPlaytime']}h total")
 
-        # STEP 3: Get exclusion lists
+        # STEP 3: Determine requested genres
+        requestedGenres = request.genres
+
+        if requestedGenres:
+            # User selected genres - auto-save them
+            saveFilterGenres(steamId, requestedGenres)
+            print(f"[Filters] Auto-saved and using: {requestedGenres}")
+        else:
+            # No genres selected - use saved preferences
+            savedGenres = getFilterGenres(steamId)
+            if savedGenres:
+                requestedGenres = savedGenres
+                print(f"[Filters] Using saved preferences: {requestedGenres}")
+            else:
+                print(f"[Filters] No genres selected - generating open recommendation")
+
+        # STEP 4: Get exclusion lists
         ownedGameIds = set(getOwnedGamesIds(steamId))
         recommendedGameIds = set(getRecommendedGameIds(steamId))
         dislikedGameIds = set(getPreferenceGameIds(steamId, "disliked"))
@@ -273,16 +298,15 @@ async def getRecommendation(
         
         print(f"Excluding {len(excludeGameIds)} games")
 
-        # STEP 4: Generate recommendation with retries
+        # STEP 5: Generate recommendation with retries
         maxAttempts = 3
         for attempt in range(maxAttempts):
             logPrefix = f"Main Attempt {attempt + 1}/{maxAttempts}"
             print(f"[{logPrefix}] Generating new recommendation")    
 
             recommendation = generateSmartRecommendation(
-                steamId=steamId,
                 gamingProfile=gamingProfile,
-                requestedGenres=request.genres,
+                requestedGenres=requestedGenres,
                 excludeGameIds=excludeGameIds,
                 logPrefix=logPrefix
             )
@@ -291,20 +315,20 @@ async def getRecommendation(
                 print(f"[{logPrefix}] AI failed to generate recommendation. Retrying...")
                 continue
     
-            # STEP 5: Save recommendation to history
+            # STEP 6: Save recommendation to history
             saveResultId = saveRecommendation(
                 steamId=steamId,
                 game=recommendation["game"],
                 reasoning=recommendation["reasoning"],
                 matchScore=recommendation["matchScore"],
-                requestedGenres=request.genres
+                requestedGenres=requestedGenres
             )
 
             if saveResultId:
                 # Success - recommendation saved
                 print(f"[{logPrefix}] Recommendation saved with ID: {saveResultId}")
 
-                # STEP 6: Return to frontend
+                # STEP 7: Return to frontend
                 return Recommendation(
                     game=GameDetail(**recommendation["game"]),
                     reasoning=recommendation["reasoning"],
@@ -555,6 +579,46 @@ def get_user_events(
         to_ts=to_ts
     )
     return {"events": events}
+
+
+# ADVANCED FILTERING ENDPOINTs
+@app.get("/api/filters/available-genres")
+async def getAvailableGenres():
+    """
+    Get list of available genres/tags/modes for filtering
+    """
+    return {
+        "genres": [
+            "Action", "Adventure", "Casual", "Farming", "Racing", "Strategy", 
+            "Simulation", "Sports", "Indie", "Puzzle", "Arcade", "Story Rich"
+        ],
+        "tags": [
+            "Horror", "Sci-Fi", "Space", "Open World", "Anime", "Fantasy",
+            "Survival", "Detective", "Mystery", "Retro", "Pixel Graphics"
+        ],
+        "modes": [
+            "Single-player", "Multiplayer", "Co-op", "Remote Play", "VR Support",
+            "First-Person", "Third-Person", "Online PvP", "Local Multiplayer"
+        ]
+    }
+
+@app.get("/api/filters/genres")
+async def getRequestedGenres(currentUser: dict = Depends(verifyToken)):
+    """
+    Get user's saved requested genres/tags/mechanics preferences
+    """
+    steamId = currentUser["sub"]
+    
+    try:
+        savedGenres = getFilterGenres(steamId)
+        
+        return FilterGenresResponse(
+            steamId=steamId,
+            savedGenres=savedGenres or []
+        )
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
