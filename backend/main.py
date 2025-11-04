@@ -275,18 +275,9 @@ async def getRecommendation(
         # STEP 3: Determine requested genres
         requestedGenres = request.genres
 
-        if requestedGenres:
-            # User selected genres - auto-save them
-            saveFilterGenres(steamId, requestedGenres)
-            print(f"[Filters] Auto-saved and using: {requestedGenres}")
-        else:
-            # No genres selected - use saved preferences
-            savedGenres = getFilterGenres(steamId)
-            if savedGenres:
-                requestedGenres = savedGenres
-                print(f"[Filters] Using saved preferences: {requestedGenres}")
-            else:
-                print(f"[Filters] No genres selected - generating open recommendation")
+        # Auto-save genre selection
+        saveFilterGenres(steamId, requestedGenres)
+        print(f"[Filters] Auto-saved and using: {requestedGenres}")
 
         # STEP 4: Get exclusion lists
         ownedGameIds = set(getOwnedGamesIds(steamId))

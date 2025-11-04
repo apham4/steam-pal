@@ -69,22 +69,10 @@ Generate personalized game recommendations using Google Gemini AI. The system an
 - **Endpoint**: `POST /api/recommendations`
 - **Description**: Get AI-powered personalized game recommendations
 - **Authentication**: Required (Bearer token)
-- **Request Body (Option 1: Specify Genres)**: Genres are automatically saved for future use
+- **Request Body**: Genres are automatically saved for future use
 ```json
 {
   "genres": ["Action", "Anime"]
-}
-```
-- **Request Body (Option 2: Use Saved Genres)**: Uses previously saved genres from a list of popular genres, otherwise uses gaming profile
-```json
-{
-  "genres": []
-}
-```
-- **Request Body (Option 3: Open Recommendation)**: No saved genres - AI recommends based purely on gaming profile
-```json
-{
-  "genres": []
 }
 ```
 - **Response**:
