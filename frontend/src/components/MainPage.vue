@@ -248,15 +248,14 @@ async function removeRecommendationPreference(game) {
           <v-tabs v-model="tab" background-color="primary" dark class="justify-center">
             <v-tab>Get Recommendation</v-tab>
             <v-tab>Past Recommendations</v-tab>
-            <!-- [V2 TODO] Preferences <v-tab>Manage Preferences</v-tab> -->
+            <v-tab>Manage Preferences</v-tab>
           </v-tabs>
         </div>
         <v-window v-model="tab">
           <v-window-item>
             <!-- Get Recommendation tab content -->
             <div v-if="tab === 0" class="d-flex flex-column align-center mt-4" style="gap: 8px;">
-            <!-- [V2 TODO] Filters
-              <div class="genre-checkbox-grid d-flex flex-column align-center" style="gap: 4px;">
+            <div class="genre-checkbox-grid d-flex flex-column align-center" style="gap: 4px;">
                 <v-row class="justify-center" style="gap: 0;">
                   <v-col v-for="genre in genres" :key="genre" cols="6" sm="4" md="3" class="py-0 my-0">
                     <v-checkbox
@@ -295,7 +294,6 @@ async function removeRecommendationPreference(game) {
                   >{{ genre }}</v-chip>
                 </div>
               </div>
-              -->
               <!-- [ADDITIONAL] Wishlist-related features
               <v-checkbox
                 v-model="useWishlist"
@@ -472,7 +470,7 @@ async function removeRecommendationPreference(game) {
               <div style="max-height: 80px; overflow-y: auto;">{{ reasoning }}</div>
             </v-card>
             <div class="d-flex justify-center mt-4" style="gap:20px;">
-                <!-- [V2 TODO] Preferences <v-btn 
+                <v-btn 
                   color="success" 
                   class="mt-2" 
                   @click="likeRecommendation(recommendation)"
@@ -487,7 +485,7 @@ async function removeRecommendationPreference(game) {
                   :disabled="preferenceStore.isDisliked(recommendation)"
                 >
                   <v-icon class="mr-2">mdi-thumb-down</v-icon> {{ preferenceStore.isDisliked(recommendation) ? 'Disliked' : 'Dislike' }}
-                </v-btn> -->
+                </v-btn>
                 <v-btn color="info" class="mt-2" @click="handleViewOnSteam(recommendation)" :href="steamStoreUrl(recommendation.gameId)" target="_blank">
                   <v-icon class="mr-2">mdi-cart</v-icon> View on Steam
                 </v-btn>
