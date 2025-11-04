@@ -38,8 +38,16 @@ export function logOut() {
   return MOCK_AUTH ? mockLogOut() : realLogOut()
 }
 
-export function getRecommendation(params) {
-  return MOCK_RECOMMENDATIONS ? mockGetRecommendation(params) : realGetRecommendation(params);
+export function getAvailableGenres() {
+  return MOCK_RECOMMENDATIONS ? mockGetAvailableGenres() : realGetAvailableGenres()
+}
+
+export function getSavedFilterPreferences() {
+  return MOCK_RECOMMENDATIONS ? mockGetSavedFilterPreferences() : realGetSavedFilterPreferences()
+}
+
+export function getRecommendation(genres = [], useWishlist = false) {
+  return MOCK_RECOMMENDATIONS ? mockGetRecommendation(genres, useWishlist) : realGetRecommendation(genres, useWishlist);
 }
 
 export function getRecommendationHistory(pageNum, pageSize) {
@@ -120,8 +128,34 @@ async function mockLogOut() {
   return { success: true };
 }
 
+async function mockGetAvailableGenres() {
+  await delay(100);
+  return {
+    "genres": [
+      "Action", "Adventure", "Casual", "Farming", "Racing", "Strategy",
+      "Simulation", "Sports", "Indie", "Puzzle", "Arcade", "Story Rich"
+    ],
+    "tags": [
+      "Horror", "Sci-Fi", "Space", "Open World", "Anime", "Fantasy",
+      "Survival", "Detective", "Mystery", "Retro", "Pixel Graphics"
+    ],
+    "modes": [
+      "Single-player", "Multiplayer", "Co-op", "Remote Play", "VR Support",
+      "First-Person", "Third-Person", "Online PvP", "Local Multiplayer"
+    ]
+  }
+}
+
+async function mockGetSavedFilterPreferences() {
+  await delay(100);
+  return {
+    steamId: '12345678901234567',
+    genres: ['Action', 'Adventure']
+  }
+}
+
 // Mock get AI recommendation
-async function mockGetRecommendation({ genre, useWishlist }) {
+async function mockGetRecommendation(genres, useWishlist) {
   await delay(700);
   // Filter out games already liked/disliked/past (simulate logic)
   return {
@@ -235,9 +269,31 @@ async function realLogOut() {
   }
 }
 
-async function realGetRecommendation(params) {
+async function realGetAvailableGenres() {
   try {
-    const res = await api.post('/api/recommendations', params);
+    const res = await api.get('/api/filters/available-genres')
+    return res.data
+  } catch (error) {
+    console.error('Error fetching available genres:', error)
+    throw error
+  }
+}
+
+async function realGetSavedFilterPreferences() {
+  try {
+    const res = await api.get('/api/filters/genres')
+    return res.data
+  } catch (error) {
+    console.error('Error fetching saved filter preferences:', error)
+    throw error;
+  }
+}
+
+async function realGetRecommendation(genres, useWishlist) {
+  try {
+    const res = await api.post('/api/recommendations', {
+      genres: genres
+    });
     return res.data;
   } catch (error) {
     console.error('Error fetching recommendation:', error)
@@ -265,7 +321,7 @@ async function realGetRecommendationHistory(pageNum, pageSize) {
 
 async function realLikeGame(gameId) {
   try {
-    const res = await api.post(`/api/preferences/${gameId}/like`);
+    const res = await api.post(`/api/preferences/${gameId}/like`)
     return res.data;
   } catch (error) {
     console.error('Error liking game:', error)
@@ -275,7 +331,7 @@ async function realLikeGame(gameId) {
 
 async function realDislikeGame(gameId) {
   try {
-    const res = await api.post(`/api/preferences/${gameId}/dislike`);
+    const res = await api.post(`/api/preferences/${gameId}/dislike`)
     return res.data;
   } catch (error) {
     console.error('Error disliking game:', error)
@@ -285,7 +341,7 @@ async function realDislikeGame(gameId) {
 
 async function realRemovePreference(gameId) {
   try {
-    const res = await api.delete(`/api/preferences/${gameId}`);
+    const res = await api.delete(`/api/preferences/${gameId}`)
     return res.data;
   } catch (error) {
     console.error('Error removing preference:', error)
@@ -295,7 +351,7 @@ async function realRemovePreference(gameId) {
 
 async function realGetLikedGames() {
   try {
-    const res = await api.get('/api/preferences/liked');
+    const res = await api.get('/api/preferences/liked')
     return res.data.games;
   } catch (error) {
     console.error('Error fetching liked games:', error)
@@ -305,7 +361,7 @@ async function realGetLikedGames() {
 
 async function realGetDislikedGames() {
   try {
-    const res = await api.get('/api/preferences/disliked');
+    const res = await api.get('/api/preferences/disliked')
     return res.data.games;
   } catch (error) {
     console.error('Error fetching disliked games:', error)
@@ -329,7 +385,7 @@ async function realLogUserEvent(eventType, gameId = null) {
   try {
     const userStore = useUserStore();
     const steamId = userStore?.profile?.steam_id;
-    if (!steamId) throw new Error('Missing steamId in user profile');
+    if (!steamId) throw new Error('Missing steamId in user profile')
 
     const payload = {
       steamId,
@@ -340,10 +396,10 @@ async function realLogUserEvent(eventType, gameId = null) {
     // Remove gameId if null to match API spec
     if (!gameId) delete payload.gameId;
 
-    const res = await api.post('/api/events/new', payload);
+    const res = await api.post('/api/events/new', payload)
     return res.data;
   } catch (error) {
-    console.error('Error logging user event:', error);
+    console.error('Error logging user event:', error)
     throw error;
   }
 }

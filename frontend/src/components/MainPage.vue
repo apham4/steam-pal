@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { usePreferenceStore } from '@/stores/preference'
-import { getRecommendation, getRecommendationHistory, likeGame, dislikeGame, removePreference, getLikedGames, getDislikedGames, logUserEvent } from '../services/api'
+import { getAvailableGenres, getSavedFilterPreferences, getRecommendation, getRecommendationHistory, likeGame, dislikeGame, removePreference, getLikedGames, getDislikedGames, logUserEvent } from '../services/api'
 
 //#region General
 const tab = ref(0)
@@ -15,6 +15,7 @@ const snackbar = ref(false)
 
 onMounted(() => {
   fetchPreferences()
+  fetchGenres()
 })
 
 // Watch for tab change
@@ -52,42 +53,56 @@ function shouldDisplaySalePrice(recommendation) {
 
 
 //#region Get Recommendation
-const genres = [
-  'Action', 'Adventure', 'RPG', 'Strategy', 'Simulation', 'Puzzle', 'Sports', 'Indie', 'Horror', 'Multiplayer'
-]
+const genres = ref([])
 const selectedGenres = ref([])
 const customGenre = ref('')
-const customGenres = ref([])
 const useWishlist = ref(false)
 const loading = ref(false)
+
+async function fetchGenres() {
+  try {
+    console.log("Fetching available genres and saved filter preferences...")
+    const [availableFilters, savedFilters] = await Promise.all([
+      getAvailableGenres(),
+      getSavedFilterPreferences()
+    ])
+    genres.value = availableFilters.genres || []
+    selectedGenres.value = savedFilters.saved_genres || []
+  } catch (err) {
+    console.error('Failed to fetch filters:', err)
+  }
+}
 
 function addCustomGenre() {
   if (customGenre.value.trim()) {
     // Split by comma, trim, and add unique genres
     const genresToAdd = customGenre.value.split(',').map(g => g.trim()).filter(g => g)
     genresToAdd.forEach(g => {
-      if (!customGenres.value.includes(g)) {
-        customGenres.value.push(g)
+      if (!selectedGenres.value.includes(g)) {
+        selectedGenres.value.push(g)
       }
     })
     customGenre.value = ''
   }
 }
 
-function removeCustomGenre(idx) {
-  customGenres.value.splice(idx, 1)
+function removeSelectedGenre(idx) {
+  selectedGenres.value.splice(idx, 1)
 }
 
 async function fetchRecommendation() {
   loading.value = true
   errorMsg.value = ''
   try {
-    await logUserEvent('recommendation_request');
-    const allGenres = [...selectedGenres.value, ...customGenres.value]
-    const result = await getRecommendation({
-      genres: allGenres, // send array, can be empty
-      useWishlist: useWishlist.value,
-    })
+    await logUserEvent('recommendation_request')
+    var genreFilters = []
+    for (const genre of selectedGenres.value) {
+      genreFilters.push(genre)
+    }
+    const result = await getRecommendation(
+      genreFilters,
+      useWishlist.value,
+    )
     recommendation.value = result.game
     reasoning.value = result.reasoning
     matchScore.value = result.match_score
@@ -151,7 +166,6 @@ async function fetchPreferences() {
 }
 
 async function likeRecommendation(game) {
-  console.log('Liking game: %s with ID %s', game, game.gameId)
   if (preferenceStore.isDisliked(game)) {
     preferenceStore.removeStoredPreference(game)
     // await removePreference(game.gameId)
@@ -164,7 +178,6 @@ async function likeRecommendation(game) {
 }
 
 async function dislikeRecommendation(game) {
-  console.log('Disliking game: %s with ID %s', game, game.gameId)
   if (preferenceStore.isLiked(game)) {
     preferenceStore.removeStoredPreference(game)
     // await removePreference(game.gameId)
@@ -255,7 +268,7 @@ async function removeRecommendationPreference(game) {
           <v-window-item>
             <!-- Get Recommendation tab content -->
             <div v-if="tab === 0" class="d-flex flex-column align-center mt-4" style="gap: 8px;">
-            <div class="genre-checkbox-grid d-flex flex-column align-center" style="gap: 4px;">
+              <div class="genre-checkbox-grid d-flex flex-column align-center" style="gap: 4px;">
                 <v-row class="justify-center" style="gap: 0;">
                   <v-col v-for="genre in genres" :key="genre" cols="6" sm="4" md="3" class="py-0 my-0">
                     <v-checkbox
@@ -277,19 +290,19 @@ async function removeRecommendationPreference(game) {
                   density="compact"
                   class="mt-1"
                   style="width:500px;"
-                  placeholder="Type in genres and press Enter."
+                  placeholder="Type in a genre and press Enter, or multiple comma-separated genres."
                   @keydown.enter="addCustomGenre"
                   hint="You can enter multiple genres separated by commas."
                   persistent-hint
                 />
-                <div v-if="customGenres.length" class="d-flex flex-wrap mt-1">
+                <div v-if="selectedGenres.length" class="d-flex flex-wrap mt-1">
                   <v-chip
-                    v-for="(genre, idx) in customGenres"
+                    v-for="(genre, idx) in selectedGenres"
                     :key="genre + idx"
                     class="mr-1"
                     color="secondary"
                     label
-                    @click:close="removeCustomGenre(idx)"
+                    @click:close="removeSelectedGenre(idx)"
                     closable
                   >{{ genre }}</v-chip>
                 </div>
