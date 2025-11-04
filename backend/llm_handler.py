@@ -3,7 +3,6 @@
 import google.generativeai as genai
 import os
 import json
-import random
 
 from typing import Dict, List, Optional, Set
 from dotenv import load_dotenv
@@ -50,6 +49,25 @@ class LLMHandler:
             excludeGameIds,
         )
 
+        # DEBUG
+        print(f"[DEBUG] Excluding {len(excludeGameIds)} games from recommendations")
+        if excludeGameIds and len(excludeGameIds) > 0:
+            sample_ids = list(excludeGameIds)[:3]
+            in_prompt = sum(1 for game_id in sample_ids if str(game_id) in prompt)
+            print(f"[DEBUG] Exclusion verification: {in_prompt}/{len(sample_ids)} sample IDs found in prompt")
+
+        if "CRITICAL EXCLUSION RULES" in prompt:
+            print(f"[DEBUG] Exclusion section found in prompt")
+        else:
+            print(f"[DEBUG] WARNING: Exclusion section not found in prompt")
+        
+        prompt_length = len(prompt)
+        estimated_tokens = prompt_length // 4 
+        print(f"[DEBUG] Prompt length: {prompt_length} chars (~{estimated_tokens} tokens)")
+        
+        if estimated_tokens > 500000:
+            print(f"[DEBUG] WARNING: Prompt approaching token limit")
+
         try:
             # Define the generation config
             config = genai.types.GenerationConfig(
@@ -79,6 +97,11 @@ class LLMHandler:
             result = self.parseResponse(response.text)
 
             if result:
+                # DEBUG
+                print(f"[DEBUG] Suggested: {result['title']} (ID: {result['gameId']}, Score: {result['matchScore']}%)")
+                
+                if result['gameId'] in excludeGameIds:
+                    print(f"[DEBUG] WARNING: Suggested game {result['gameId']} is in exclusion list")
                 return result
             else:
                 print(f"Failed to parse AI response")
@@ -139,13 +162,7 @@ class LLMHandler:
         
         # Format excluded games
         if excludeGameIds:
-            excludedListShuffled = list(excludeGameIds)
-            random.shuffle(excludedListShuffled) # Shuffle the full list
-
-            # Take the first 10 from the shuffled list for variety
-            excludedList = ", ".join(excludedListShuffled[:10])
-            if len(excludeGameIds) > 10:
-                excludedList += f"... and {len(excludeGameIds) - 10} more"
+            excludedList = ", ".join(list(excludeGameIds))
         else:
             excludedList = "None (user has no owned games or recommendations yet)"
 
