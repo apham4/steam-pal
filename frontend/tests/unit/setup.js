@@ -1,5 +1,5 @@
 import { config } from '@vue/test-utils'
-import { vi } from 'vitest'
+import { vi, beforeAll, afterAll } from 'vitest'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
@@ -50,3 +50,23 @@ global.localStorage = {
   removeItem: vi.fn(),
   clear: vi.fn(),
 }
+
+// Alternative: Suppress all console warnings during tests
+const originalWarn = console.warn
+const originalError = console.error
+
+beforeAll(() => {
+  console.warn = vi.fn()
+  console.error = vi.fn((message) => {
+    // Still log actual errors, filter out Vue warnings
+    if (typeof message === 'string' && message.includes('[Vue warn]')) {
+      return
+    }
+    originalError(message)
+  })
+})
+
+afterAll(() => {
+  console.warn = originalWarn
+  console.error = originalError
+})
