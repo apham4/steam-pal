@@ -29,7 +29,7 @@ npm run build
 ```
 
 ### Run Unit Tests with [Vitest](https://vitest.dev/)
-
+Remember to toggle the mock consts in api.js to true.
 ```sh
 npm run test:unit
 ```

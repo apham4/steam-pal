@@ -17,10 +17,14 @@ const api = axios.create({
 
 // Add JWT token to Authorization header for every request
 api.interceptors.request.use(config => {
-  const userStore = useUserStore()
-  const token = userStore.jwt
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+  try {
+    const userStore = useUserStore()
+    const token = userStore.jwt
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+  } catch (error) {
+    console.error('Error setting Authorization header:', error)
   }
   return config;
 });
