@@ -47,7 +47,7 @@ function showRecommendationDetails(game) {
 }
 
 function shouldDisplaySalePrice(recommendation) {
-  return recommendation.salePrice && recommendation.salePrice != '' && recommendation.salePrice !== recommendation.price
+  return recommendation.salePrice != null && recommendation.salePrice != '' && recommendation.salePrice !== recommendation.price
 }
 //#endregion
 

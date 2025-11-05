@@ -9,6 +9,16 @@ vi.mock('*.css', () => ({}))
 vi.mock('*.scss', () => ({}))
 vi.mock('*.sass', () => ({}))
 
+// Mock ResizeObserver for Vuetify components
+global.ResizeObserver = class ResizeObserver {
+  constructor(callback) {
+    this.callback = callback
+  }
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
 // Create Vuetify instance for tests
 const vuetify = createVuetify({
   components,
