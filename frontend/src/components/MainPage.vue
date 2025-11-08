@@ -128,6 +128,7 @@ const pastRecommendationsPageSize = ref(7)
 const pastRecommendationsTotalPages = ref(1)
 
 function handlePastRecommendationsPageChange(newPage) {
+  console.log("Fetching new page ", newPage)
   fetchRecommendationHistory(newPage, pastRecommendationsPageSize.value)
 }
 
@@ -368,8 +369,8 @@ async function removeRecommendationPreference(game) {
                 <v-pagination
                   v-model="pastRecommendationsPage"
                   :length="pastRecommendationsTotalPages"
-                  @input="handlePastRecommendationsPageChange"
-                  color="primary"
+                  @update:modelValue="handlePastRecommendationsPageChange"
+                  color="secondary"
                 />
               </div>
             </div>
