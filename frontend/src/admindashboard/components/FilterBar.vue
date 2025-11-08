@@ -8,7 +8,7 @@ const eventTypes = ref(['login', 'logout']);
 const allEventTypes = [
   { label: 'Login', value: 'login' },
   { label: 'Logout', value: 'logout' },
-  { label: 'Request Recommendation', value: 'request_recommendation' },
+  { label: 'Request Recommendation', value: 'recommendation_request' },
   { label: 'View Past Recommendation', value: 'view_past_recommendation' },
   { label: 'View Store', value: 'view_store' },
   { label: 'Like Recommendation', value: 'like_recommendation' },

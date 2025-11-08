@@ -47,7 +47,11 @@ function exportCSV() {
 </script>
 
 <template>
-  <v-btn color="secondary" @click="exportCSV">
+  <v-btn
+    color="secondary"
+    @click="exportCSV"
+    :disabled="!props.data"
+    >
     Export to CSV
   </v-btn>
 </template>
