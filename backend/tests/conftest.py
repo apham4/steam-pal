@@ -1,3 +1,7 @@
+"""
+Pytest configuration and fixtures for backend tests
+"""
+
 import pytest
 import sqlite3
 import tempfile
@@ -11,6 +15,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 import db_helper
 
+# Database Fixtures
 @pytest.fixture
 def test_db_connection():
     """Create a temporary test database"""
@@ -54,9 +59,10 @@ def test_db_connection():
         except:
             pass
 
+# User Data Fixtures
 @pytest.fixture
 def sample_user_data():
-    """Sample user data for tests"""
+    """Sample user data for authentication tests"""
     return {
         'steamId': '76561197960287930',
         'displayName': 'Test User',
@@ -66,7 +72,7 @@ def sample_user_data():
 
 @pytest.fixture
 def sample_game_data():
-    """Sample game data for tests"""
+    """Sample game data for recommendation tests"""
     return {
         'gameId': '292030',
         'title': 'The Witcher 3: Wild Hunt',
@@ -102,6 +108,34 @@ def sample_gaming_profile():
         'gameCount': 150
     }
 
+@pytest.fixture
+def sample_owned_games():
+    """Sample owned games data for caching tests"""
+    return [
+        {
+            'appid': 292030,
+            'name': 'The Witcher 3: Wild Hunt',
+            'playtime_forever': 10800,  # 180 hours
+            'img_icon_url': 'abc123',
+            'img_logo_url': 'def456'
+        },
+        {
+            'appid': 730,
+            'name': 'Counter-Strike: Global Offensive',
+            'playtime_forever': 5400,  # 90 hours
+            'img_icon_url': 'ghi789',
+            'img_logo_url': 'jkl012'
+        },
+        {
+            'appid': 570,
+            'name': 'Dota 2',
+            'playtime_forever': 3600,  # 60 hours
+            'img_icon_url': 'mno345',
+            'img_logo_url': 'pqr678'
+        }
+    ]
+
+# Mock API Response Fixtures
 @pytest.fixture
 def mock_llm_response():
     """Mock LLM API response for game recommendations"""
@@ -165,3 +199,38 @@ def mock_steam_api():
             'avatarfull': 'https://example.com/avatar.jpg'
         }
     }
+
+# Pytest Configuration Hooks
+def pytest_configure(config):
+    """Register custom markers"""
+    config.addinivalue_line("markers", "unit: Unit tests")
+    config.addinivalue_line("markers", "integration: Integration tests")
+    config.addinivalue_line("markers", "slow: Slow-running tests")
+    config.addinivalue_line("markers", "auth: Authentication tests")
+    config.addinivalue_line("markers", "db: Database tests")
+    config.addinivalue_line("markers", "api: API endpoint tests")
+    config.addinivalue_line("markers", "workflow: Workflow tests")
+
+
+def pytest_collection_modifyitems(config, items):
+    """Auto-mark tests based on file location"""
+    for item in items:
+        test_path = str(item.fspath)
+        
+        if '/unit/' in test_path or '\\unit\\' in test_path:
+            item.add_marker(pytest.mark.unit)
+        
+        if '/integration/' in test_path or '\\integration\\' in test_path:
+            item.add_marker(pytest.mark.integration)
+        
+        if 'test_auth' in test_path:
+            item.add_marker(pytest.mark.auth)
+        
+        if 'test_db_helper' in test_path:
+            item.add_marker(pytest.mark.db)
+        
+        if 'test_api_endpoints' in test_path:
+            item.add_marker(pytest.mark.api)
+        
+        if 'workflow' in test_path:
+            item.add_marker(pytest.mark.workflow)

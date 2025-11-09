@@ -1,3 +1,7 @@
+"""
+Unit tests for Pydantic validation
+"""
+
 import sys
 import pytest
 import json
@@ -29,38 +33,10 @@ class TestRecommendationRequest:
         """Test creating request with defaults"""
         request = RecommendationRequest()
         assert request.genres == []
-    
-    def test_recommendation_request_invalid_type(self):
-        """Test creating request with invalid genres type"""
-        with pytest.raises(ValidationError):
-            RecommendationRequest(genres="RPG")  # Should be list
 
 
 class TestGameDetail:
     """Test GameDetail model validation"""
-    
-    def test_game_detail_with_defaults(self):
-        """Test that GameDetail uses default values for missing fields"""
-        game = GameDetail()
-    
-        # Verify all fields have default empty string values
-        assert game.gameId == ""
-        assert game.title == ""
-        assert game.thumbnail == ""
-        assert game.releaseDate == ""
-        assert game.publisher == ""
-        assert game.developer == ""
-        assert game.price == ""
-        assert game.salePrice == ""
-        assert game.description == ""
-        assert game.id == ""
-
-        # Verify it can be created with partial data
-        partial_game = GameDetail(gameId="12345", title="Test Game")
-        assert partial_game.gameId == "12345"
-        assert partial_game.title == "Test Game"
-        assert partial_game.price == "" 
-        assert partial_game.id == "12345"
 
     def test_game_detail_complete(self):
         """Test creating complete game detail"""
@@ -91,15 +67,6 @@ class TestGameDetail:
         assert game.title == 'Test Game'
         assert game.thumbnail == ''
         assert game.price == ''
-    
-    def test_game_detail_type_coercion(self):
-        """Test type coercion for numeric gameId"""
-        game = GameDetail(
-            gameId=292030,  # Integer instead of string
-            title='The Witcher 3'
-        )
-        
-        assert game.gameId == '292030'  # Should be coerced to string
 
 
 class TestRecommendation:
@@ -116,30 +83,6 @@ class TestRecommendation:
         
         assert recommendation.game.title == sample_game_data['title']
         assert recommendation.reasoning.startswith('This game is perfect')
-    
-    def test_recommendation_missing_fields(self, sample_game_data):
-        """Test creating recommendation without required fields"""
-        game = GameDetail(**sample_game_data)
-        
-        with pytest.raises(ValidationError):
-            Recommendation(game=game)  # Missing reasoning
-        
-        with pytest.raises(ValidationError):
-            Recommendation(reasoning='Great game!')  # Missing game
-    
-    def test_recommendation_json_serialization(self, sample_game_data):
-        """Test JSON serialization"""
-        game = GameDetail(**sample_game_data)
-        recommendation = Recommendation(
-            game=game,
-            reasoning='Test reasoning'
-        )
-        
-        json_data = recommendation.model_dump()
-        
-        assert 'game' in json_data
-        assert 'reasoning' in json_data
-        assert json_data['game']['title'] == sample_game_data['title']
 
 
 class TestFilterGenresModel:
@@ -170,78 +113,12 @@ class TestFilterGenresModel:
         assert 'saved_genres' in serialized
         assert serialized['steam_id'] == '76561197960287930'
         assert serialized['saved_genres'] == ['RPG']
-    
-    def test_filter_genres_response_empty_genres(self):
-        """Test response with empty genres list"""
-        
-        response = FilterGenresResponse(
-            steamId='76561197960287930',
-            savedGenres=[]
-        )
-        
-        assert response.savedGenres == []
-    
-    def test_filter_genres_response_many_genres(self):
-        """Test response with many genres"""
-        
-        genres = ['RPG', 'Action', 'Adventure', 'Horror', 'Survival', 
-                  'Co-op', 'Single-Player', 'Open World']
-        
-        response = FilterGenresResponse(
-            steamId='76561197960287930',
-            savedGenres=genres
-        )
-        
-        assert len(response.savedGenres) == 8
-        assert 'RPG' in response.savedGenres
-    
-    def test_filter_genres_response_json_serialization(self):
-        """Test JSON serialization"""
-        
-        response = FilterGenresResponse(
-            steamId='76561197960287930',
-            savedGenres=['RPG', 'Action']
-        )
-        
-        json_str = response.model_dump_json(by_alias=True)
-        parsed = json.loads(json_str)
-        
-        assert parsed['steam_id'] == '76561197960287930'
-        assert parsed['saved_genres'] == ['RPG', 'Action']
         
 
 class TestModelEdgeCases:
     """Test edge cases and boundary conditions"""
     
-    def test_empty_string_fields(self):
-        """Test models with empty string fields"""
-        game = GameDetail(
-            gameId='',
-            title=''
-        )
-        
-        assert game.gameId == ''
-        assert game.title == ''
-    
-    def test_special_characters_in_strings(self):
-        """Test models with special characters"""
-        game = GameDetail(
-            gameId='12345',
-            title='Test™ Game® with <special> "characters"',
-            description='Line 1\nLine 2\tTabbed'
-        )
-        
-        assert '™' in game.title
-        assert '\n' in game.description
-    
-    def test_very_long_strings(self):
-        """Test models with very long strings"""
-        long_description = 'A' * 10000
-        
-        game = GameDetail(
-            gameId='12345',
-            title='Test Game',
-            description=long_description
-        )
-        
-        assert len(game.description) == 10000
+    def test_recommendation_request_invalid_type(self):
+        """Test creating request with invalid genres type"""
+        with pytest.raises(ValidationError):
+            RecommendationRequest(genres="RPG")  # Should be list

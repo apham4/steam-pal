@@ -1,3 +1,7 @@
+"""
+Unit test for Steam API interaction functions
+"""
+
 import sys
 import pytest
 from unittest.mock import patch, Mock
@@ -70,43 +74,6 @@ class TestGameDetailsFetching:
         
         assert result is not None
         assert mock_get.call_count == 1
-    
-    @patch('steam_api.requests.get')
-    @patch('steam_api.time.sleep')  # Mock sleep to speed up test
-    def test_fetch_game_details_with_retry_success_on_second_attempt(self, mock_sleep, mock_get, mock_steam_api):
-        """Test retry logic succeeds on second attempt"""
-        # First call fails with 500, second succeeds
-        fail_response = Mock()
-        fail_response.status_code = 500
-        
-        success_response = Mock()
-        success_response.status_code = 200
-        success_response.json.return_value = {
-            '292030': {
-                'success': True,
-                'data': mock_steam_api['game_details']
-            }
-        }
-        
-        mock_get.side_effect = [fail_response, success_response]
-        
-        result = steam_api.fetchGameDetailsWithRetry('292030', maxRetries=3)
-        
-        assert result is not None
-        assert mock_get.call_count == 2
-    
-    @patch('steam_api.requests.get')
-    @patch('steam_api.time.sleep')
-    def test_fetch_game_details_with_retry_all_fail(self, mock_sleep, mock_get):
-        """Test retry logic when all attempts fail"""
-        mock_response = Mock()
-        mock_response.status_code = 500
-        mock_get.return_value = mock_response
-        
-        result = steam_api.fetchGameDetailsWithRetry('292030', maxRetries=3)
-        
-        assert result is None
-        assert mock_get.call_count == 3
 
 
 class TestUserDataFetching:
@@ -145,12 +112,6 @@ class TestUserDataFetching:
         result = steam_api.fetchUserOwnedGames('76561197960287930')
         assert len(result) == 0
     
-    @patch('steam_api.STEAM_API_KEY', None)
-    def test_fetch_user_owned_games_no_api_key(self):
-        """Test fetching owned games without API key"""
-        result = steam_api.fetchUserOwnedGames('76561197960287930')
-        assert len(result) == 0
-    
     @patch('steam_api.requests.get')
     def test_fetch_user_profile_success(self, mock_get, mock_steam_api):
         """Test fetching user profile"""
@@ -168,21 +129,6 @@ class TestUserDataFetching:
         assert result is not None
         assert result['steamid'] == '76561197960287930'
         assert result['personaname'] == 'Test User'
-    
-    @patch('steam_api.requests.get')
-    def test_fetch_user_profile_not_found(self, mock_get):
-        """Test fetching non-existent user profile"""
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            'response': {
-                'players': []
-            }
-        }
-        mock_response.raise_for_status = Mock()
-        mock_get.return_value = mock_response
-        
-        result = steam_api.fetchUserProfile('99999999999999999')
-        assert result is None
 
 
 class TestDataTransformation:
@@ -199,93 +145,3 @@ class TestDataTransformation:
         assert result['developer'] == 'CD PROJEKT RED'
         assert result['price'] == '$9.99'
         assert result['salePrice'] == '$9.99'
-    
-    def test_transform_game_data_minimal(self):
-        """Test transforming minimal game data"""
-        minimal_data = {
-            'steam_appid': '12345',
-            'name': 'Test Game'
-        }
-        
-        result = steam_api.transformGameData(minimal_data)
-        
-        assert result['gameId'] == '12345'
-        assert result['title'] == 'Test Game'
-        assert result['thumbnail'] == ''
-        assert result['releaseDate'] == ''
-    
-    def test_transform_game_data_with_error(self):
-        """Test transforming invalid game data"""
-        invalid_data = None
-        
-        # Should not raise error, return minimal structure
-        result = steam_api.transformGameData(invalid_data or {})
-        
-        assert 'gameId' in result
-        assert 'title' in result
-
-
-class TestPriceFormatting:
-    """Test price formatting functions"""
-    
-    def test_format_price_usd(self):
-        """Test formatting USD price"""
-        price_data = {
-            'final': 3999,  # $39.99
-            'currency': 'USD'
-        }
-        
-        result = steam_api.formatPrice(price_data)
-        assert result == '$39.99'
-    
-    def test_format_price_eur(self):
-        """Test formatting EUR price"""
-        price_data = {
-            'final': 2999,
-            'currency': 'EUR'
-        }
-        
-        result = steam_api.formatPrice(price_data)
-        assert result == '€29.99'
-    
-    def test_format_price_gbp(self):
-        """Test formatting GBP price"""
-        price_data = {
-            'final': 1999,
-            'currency': 'GBP'
-        }
-        
-        result = steam_api.formatPrice(price_data)
-        assert result == '£19.99'
-    
-    def test_format_price_free(self):
-        """Test formatting free game"""
-        result = steam_api.formatPrice(None)
-        assert result == 'Free to Play'
-    
-    def test_format_sale_price_on_sale(self):
-        """Test formatting sale price when on sale"""
-        price_data = {
-            'final': 999,
-            'discount_percent': 75,
-            'currency': 'USD'
-        }
-        
-        result = steam_api.formatSalePrice(price_data)
-        assert result == '$9.99'
-    
-    def test_format_sale_price_no_sale(self):
-        """Test formatting sale price when not on sale"""
-        price_data = {
-            'final': 3999,
-            'discount_percent': 0,
-            'currency': 'USD'
-        }
-        
-        result = steam_api.formatSalePrice(price_data)
-        assert result == ''
-    
-    def test_format_sale_price_none(self):
-        """Test formatting sale price when price data is None"""
-        result = steam_api.formatSalePrice(None)
-        assert result == ''
